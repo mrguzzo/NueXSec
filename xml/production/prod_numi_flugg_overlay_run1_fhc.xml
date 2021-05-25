@@ -2,7 +2,7 @@
 
 <!-- Production Project -->
 <!DOCTYPE project [
-<!ENTITY release "v08_00_00_49">
+<!ENTITY release "v08_00_00_51">
 <!ENTITY file_type "mc">
 <!ENTITY run_type "physics">
 <!ENTITY user "kmistry">
@@ -55,12 +55,14 @@
     <workdir>/pnfs/uboone/scratch/users/&user;/MCC9/&name;/work/flugg_sample/reco1</workdir>
     <bookdir>/uboone/data/users/&user;/book/MCC9/&name;/flugg_sample/reco1</bookdir>
     <maxfilesperjob>1</maxfilesperjob>
-    <numjobs>574</numjobs>
+    <numjobs>2391</numjobs>
     <datatier>reconstructed</datatier>
     <memory>3500</memory>
-    <schema>root</schema>
+    <schema>gsiftp</schema>
     <inputdef>&indef;</inputdef>
     <disk>30GB</disk>
+    <prestagefraction>1</prestagefraction>
+    <endscript>/pnfs/uboone/resilient/users/kmistry/zip_logs.sh</endscript>
     <jobsub>--expected-lifetime=24h -e IFDH_CP_UNLINK_ON_ERROR=1</jobsub>
     <jobsub_start>  --expected-lifetime=short</jobsub_start>
     <!-- <blacklist>Lancaster</blacklist> -->
@@ -73,11 +75,13 @@
     <workdir>/pnfs/uboone/scratch/users/&user;/MCC9/&name;/work/flugg_sample/reco2</workdir>
     <bookdir>/uboone/data/users/&user;/book/MCC9/&name;/flugg_sample/reco2</bookdir>
     <maxfilesperjob>1</maxfilesperjob>
-    <numjobs>2300</numjobs> <!--2383 -->
+    <numjobs>2386</numjobs> <!--2386 -->
     <datatier>reconstructed</datatier>
     <memory>3500</memory>
     <schema>root</schema>
     <disk>10GB</disk>
+    <datafiletypes>root,pndr,local</datafiletypes>
+    <endscript>/pnfs/uboone/resilient/users/kmistry/zip_logs.sh</endscript>
     <jobsub>--expected-lifetime=24h -e IFDH_CP_UNLINK_ON_ERROR=1</jobsub>
     <jobsub_start>  --expected-lifetime=short</jobsub_start>
     <!-- <blacklist>Lancaster</blacklist> -->

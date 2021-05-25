@@ -2,6 +2,7 @@
 #define SYSTEMATICSHELPER_H
 
 #include "Utility.h"
+#include "WienerSVD.h"
 
 // Class for making plots for systematic studies
 class SystematicsHelper{
@@ -16,9 +17,6 @@ class SystematicsHelper{
     // Input reweigted histogram file
     TFile *f_nuexsec;
 
-    // The output file with the systematic uncertainties
-    TFile *file_sys_var;
-
     // Class instances
     Utility _util;
 
@@ -27,11 +25,13 @@ class SystematicsHelper{
     
     TTree * tree;
 
+    WienerSVD _wSVD;
+
     std::vector<double> POT_v; // vector of POT for each variation 
 
+    bool scale_bins = false;
+
     double Data_POT;
-
-
     // -------------------------------------------------------------------------
     // Initialiser function
     void Initialise( Utility _utility);
@@ -45,7 +45,7 @@ class SystematicsHelper{
     void PlotVariationsEXT(std::string hist_name, const char* print_name, std::string cut_name, const char* x_axis_name);
     // -------------------------------------------------------------------------
     // Plots the Sys Variations
-    void SysVariations(std::string hist_name, const char* print_name, std::string cut_name, const char* x_axis_name, std::string folder_name, std::string plot_name, std::string cut_name_pretty);
+    void SysVariations(int hist_index, const char* print_name, int cut, const char* x_axis_name, bool plotdata);
     // -------------------------------------------------------------------------
     void SetVariationProperties(TH1D* h, int index);
     // -------------------------------------------------------------------------
@@ -86,13 +86,16 @@ class SystematicsHelper{
     void SetLabelName(std::string label, std::string &label_up, std::string &label_dn);
     // -------------------------------------------------------------------------
     // Calculate the covariance, correlation and fractional covariance matrices
-    void CalcMatrices(std::string label, int var, std::vector<std::vector<TH1D*>> h_universe );
+    void CalcMatrices(std::string label, int var, std::vector<std::vector<TH1D*>> h_universe, int _type, TH1D* h_CV  );
     // -------------------------------------------------------------------------
     // Fill the total systematic vector with the square sum of the uncertainty
-    void FillSysVector(std::string variation, int var, int type, TH1D *h_up, TH1D *h_dn);
+    void FillSysVector(std::string variation, int var, int type, TH1D *h_up, TH1D *h_dn, TH1D* h_CV);
     // -------------------------------------------------------------------------
     // Fill vector with the statistical uncertainties
     void FillStatVector();
+    // -------------------------------------------------------------------------
+    // Add the smearing covariance matrices to the reco covariance matrices
+    void AddSmearCovMatrix();
     // -------------------------------------------------------------------------
     // Fill POT counting uncertainty vector
     void FillPOTCountingVector();
@@ -106,6 +109,12 @@ class SystematicsHelper{
     // Save the covariance matrix
     void SaveCovMatrix(TH2D* cov, std::string print_name);
     // -------------------------------------------------------------------------
+    // Save the correlation matrix
+    void SaveCorMatrix(TH2D* cov, TH1D* h_CV, std::string print_name);
+    // -------------------------------------------------------------------------
+    // Save the frac covariance matrix
+    void SaveFracCovMatrix(TH2D* cov, TH1D* h_CV, std::string print_name);
+    // -------------------------------------------------------------------------
     // Make the total beamline sys error plots
     void PlotTotUnisim(std::string unisim_type);
     // -------------------------------------------------------------------------
@@ -113,16 +122,31 @@ class SystematicsHelper{
     void SetUnisimColours(std::string label, TH1D* h_up, TH1D* h_dn);
     // -------------------------------------------------------------------------
     // Get the systematic uncertainty for each cut for a specific set of variables
-    void GetCutSysUncertainty(std::string histname, int cut_index, std::string label, int num_uni, std::string var_type);
+    void GetCutSysUncertainty(std::string histname, int cut_index, std::string label, int num_uni, std::string var_type, TH1D* &h_err);
     // -------------------------------------------------------------------------
     // Plot detector variation histograms for the cross section variables
     void PlotReweightingModeDetVar(std::string label, int var, int detvar_index, std::string label_pretty);
     // -------------------------------------------------------------------------
-    // Make a plot of the systematics in one plot
-    void MakeTotUncertaintyPlot();
+    // Write the cut histograms to file
+    void SaveCutHistograms(std::vector<std::tuple<std::string, int, std::string>> tuple_label);
     // -------------------------------------------------------------------------
-
-
+    // Write the cut histograms to file for detector variations
+    void SaveCutHistogramsDetVar();
+    // -------------------------------------------------------------------------
+    // Make a plot of the systematics in one plot
+    void MakeTotUncertaintyPlot(bool AddStatErr);
+    // -------------------------------------------------------------------------
+    // Initialse the matrix of covariance matrices
+    void InitialseCovarianceVector();
+    // -------------------------------------------------------------------------
+    // Write the results to a file for ease of storage
+    void ExportResult(TFile* f);
+    // -------------------------------------------------------------------------
+    // Save the total data cross section result to file
+    void ExportTotalCrossSectionResult();
+    // -------------------------------------------------------------------------
+    // Calculate the Mean and RMS in a range
+    void CalcdEdxRMSMean(TH1D* hist, std::string variation);
 
 
 
@@ -131,8 +155,8 @@ class SystematicsHelper{
 
     enum enum_variations {
         k_CV,
-        // k_bnb_diffusion,
         k_LYRayleigh,
+        k_LYDown,
         // k_LYAttenuation,
         k_SCE,
         k_Recomb2,
@@ -153,8 +177,8 @@ class SystematicsHelper{
 
     std::vector<std::string> var_string = {
         "CV",
-        // "BNB_Diffusion",
         "LYRayleigh",
+        "LYDown",
         // "LYAttenuation",
         "SCE",
         "Recomb2",
@@ -169,127 +193,115 @@ class SystematicsHelper{
     // strings used for the legend of the plots of the detector variations
     std::vector<std::string> var_string_pretty = {
         "CV",
-        // "BNB Diffusion",
         "LY Rayleigh",
+        "LY Down",
         // "LY Attenuation",
         "SCE",
         "Recombination",
         "WM X",
         "WM YZ",
         "WM Theta XZ",
-        "WM Theta YZ w/ Spl.",
+        "WM Theta YZ",
+        // "WM Theta YZ w/ Spl.",
         // "WM Theta YZ w/o Spl.",
         // "WM dE/dX" 
     };
 
     // colors used for the plots of the detector variations
     std::vector<int> var_string_pretty_color = {
-         1, // CV
-         //2, // BNB Diffusion
-         2, // LYRayleigh
-         6, // LYAttenuation
-         3, // SCE
-         9, // Recombination
+         1,  // CV
+         2,  // LYRayleigh
+         95, // LY Down
+         6,  // LYAttenuation
+         3,  // SCE
+         9,  // Recombination
          30, // WM X
-         4, // WM YZ
+         4,  // WM YZ
          53, // WM Theta XZ
-         8, // WM Theta YZ w/ Spl.
-        //  95, // WM Theta YZ w/o Spl.
+         8,  // WM Theta YZ w/ Spl.
+        //  8, // WM Theta YZ w/o Spl.
         //  7 // WM dE/dX
     };
 
-    // enum for histogram vars
+    // enum for histogram types
     enum TH1D_xsec_hist_vars {
-        k_xsec_sel,     // Selected event histogram binned in energy
-        k_xsec_bkg,     // Bkg event histogram binned in energy
-        k_xsec_gen,     // Gen event histogram binned in energy
-        k_xsec_sig,     // Sig event histogram binned in energy
-        k_xsec_eff,     // Efficiency histogram binned in energy
-        k_xsec_ext,     // EXT event histogram binned in energy
-        k_xsec_dirt,    // Dirt event histogram binned in energy
-        k_xsec_data,    // Data event histogram binned in energy
-        k_xsec_mcxsec,  // MC Cross Section
-        k_xsec_dataxsec,// Data Cross Section
+        k_xsec_sel,          // Selected event histogram binned in energy
+        k_xsec_bkg,          // Bkg event histogram binned in energy
+        k_xsec_gen,          // Gen event histogram binned in energy
+        k_xsec_gen_smear,    // Gen event histogram binned in energy with smeared truth
+        k_xsec_sig,          // Sig event histogram binned in energy
+        k_xsec_eff,          // Efficiency histogram binned in energy
+        k_xsec_ext,          // EXT event histogram binned in energy
+        k_xsec_dirt,         // Dirt event histogram binned in energy
+        k_xsec_data,         // Data event histogram binned in energy
+        k_xsec_mcxsec,       // MC Cross Section
+        k_xsec_mcxsec_smear, // MC Cross Section smeared truth
+        k_xsec_dataxsec,     // Data Cross Section
         k_TH1D_xsec_MAX
     };
 
     // enum for histogram vars
     enum TH1D_xsec_var_vars {
         k_var_integrated,     // Integrated X-Section
-        k_var_reco_el_E,      // Reconstructed electron energy
-        k_var_true_el_E,      // True electron energy
-        // k_var_true_nu_E,      // True neutrino energy
-        // k_var_reco_nu_E,      // Reconstructed neutrino energy
+        k_var_recoX,      // Reconstructed electron energy
+        k_var_trueX,      // True electron energy
         k_TH1D_xsec_var_MAX
     };
 
     // Names for cross section histograms
-    std::vector<std::string> xsec_types = {"sel", "bkg", "gen", "sig", "eff", "ext", "dirt", "data", "mc_xsec", "data_xsec"};
-    std::vector<std::string> xsec_types_pretty = {"Selected", "Background", "Generated Signal", "Signal", "Efficiency", "Beam-Off", "Dirt", "Beam-On", "MC", "Data"};
+    std::vector<std::string> xsec_types = {"sel", "bkg", "gen", "gen_smear", "sig", "eff", "ext", "dirt", "data", "mc_xsec", "mc_xsec_smear", "data_xsec"};
+    std::vector<std::string> xsec_types_pretty = {"Selected", "Background", "Generated Signal", "Smeared Prediction", "Signal", "Efficiency", "Beam-Off", "Dirt", "Beam-On", "MC Event Rate", "MC Event Rate Response",  "Data Event Rate"};
 
-    std::vector<std::string> vars = {"integrated",
-                                     "reco_el_E",
-                                     "true_el_E"
-                                    //  "true_nu_E",
-                                    //  "reco_nu_e"
-                                     };
-
-
-    // Use these for when we do the cross-section
-    // std::vector<std::string> var_labels = {";;#nu_{e} + #bar{#nu}_{e} CC Cross-Section [10^{-39} cm^{2}]",
-    //                                     ";Reco Leading Shower Energy [GeV];#frac{d#sigma_{#nu_{e} + #bar{#nu}_{e}}}{dE^{reco}_{e}} CC Cross-Section [10^{-39} cm^{2}/GeV]",
-    //                                     ";True Electron Energy [GeV];#frac{d#sigma_{#nu_{e} + #bar{#nu}_{e}}}{dE^{true}_{e}} CC Cross-Section [10^{-39} cm^{2}/GeV]"
-    //                                     // ";True #nu_{e} Energy [GeV];#frac{d#sigma_{#nu_{e} + #bar{#nu}_{e}}}{dE^{true}_{#nu_{e}}} CC Cross-Section [10^{-39} cm^{2}/GeV]",
-    //                                     // ";Reco #nu_{e} Energy [GeV];#frac{d#sigma_{#nu_{e} + #bar{#nu}_{e}}}{dE^{reco}_{#nu_{e}}} CC Cross-Section [10^{-39} cm^{2}/GeV]"
-    //                                     };
-    
-    // Use these for when we do the flux normalised event rate
-    std::vector<std::string> var_labels = {";;#nu_{e} + #bar{#nu}_{e} CC Flux Norm. Event Rate [cm^{2}]",
-                                        ";Reco. Leading Shower Energy [GeV];#nu_{e} + #bar{#nu}_{e} CC Flux Norm. Event Rate [cm^{2}/GeV]",
-                                        ";True e^{-} + e^{+} Energy [GeV]; #nu_{e} + #bar{#nu}_{e} CC Flux Norm. Event Rate [cm^{2}/GeV]"
-                                        // ";True #nu_{e} Energy [GeV];#frac{d#sigma_{#nu_{e} + #bar{#nu}_{e}}}{dE^{true}_{#nu_{e}}} CC Cross-Section [10^{-39} cm^{2}/GeV]",
-                                        // ";Reco #nu_{e} Energy [GeV];#frac{d#sigma_{#nu_{e} + #bar{#nu}_{e}}}{dE^{reco}_{#nu_{e}}} CC Cross-Section [10^{-39} cm^{2}/GeV]"
-                                        };
-
-
-    std::vector<std::string> var_labels_x = {"",
-                                        "Reco. Leading Shower Energy [GeV]",
-                                        "True e^{-} + e^{+} Energy [GeV]"
-                                        // "True #nu_{e} Energy [GeV]",
-                                        // "Reco #nu_{e} Energy [GeV]"
-                                        };
+    std::vector<std::string> vars = {"integrated","recoX", "trueX" };
 
     // Containter for the central value histograms
     std::vector<std::vector<TH1D*>> cv_hist_vec; // reco elec e, <gen, sig, etc>
 
     enum updn {k_up, k_dn};
 
-    // Vectors to store the quadrature sum of the uncertainties
-    // We combine all of these to then get the total error and plot it
-    std::vector<std::vector<std::vector<double>>> v_sys_total;         // differential variable, type, bin error [total systematic]
-    std::vector<std::vector<std::vector<double>>> v_stat_total;        // differential variable, type, bin error [total statistical]
-    std::vector<std::vector<std::vector<double>>> v_genie_uni_total;   // differential variable, type, bin error [genie unisim]
-    std::vector<std::vector<std::vector<double>>> v_genie_multi_total; // differential variable, type, bin error [genie multisim]
-    std::vector<std::vector<std::vector<double>>> v_beamline_total;    // differential variable, type, bin error [beamline unisim]
-    std::vector<std::vector<std::vector<double>>> v_hp_total;          // differential variable, type, bin error [hadron production multisim]
-    std::vector<std::vector<std::vector<double>>> v_reint_total;       // differential variable, type, bin error [geant reinteraction multisim]
-    std::vector<std::vector<std::vector<double>>> v_dirt_total;        // differential variable, type, bin error [dirt shift by +/- 100%]
-    std::vector<std::vector<std::vector<double>>> v_pot_total;         // differential variable, type, bin error [Flat 2% for POT counting]
-    std::vector<std::vector<std::vector<double>>> v_detvar_total;      // differential variable, type, bin error [Total detector variation err]
+    // Names of the overall errors
+    enum enum_sys {
+        k_err_tot,
+        k_err_stat,
+        k_err_sys,
+        k_err_genie_uni,
+        k_err_genie_multi,
+        k_err_hp,
+        k_err_beamline,
+        k_err_dirt,
+        k_err_pot,
+        k_err_reint,
+        k_err_detvar,
+        k_err_pi0,
+        k_err_mcstats,
+        k_ERR_MAX
+    };
 
-    TH2D* h_cov_tot;         // Sum of all covariance matrices
-    TH2D* h_cov_sys;         // Total Systematic covariance matrix
-    TH2D* h_cov_stat;        // Diagonal statistical covariance matrix
-    TH2D* h_cov_genie_uni;   // Genie unisims
-    TH2D* h_cov_genie_multi; // Genie multisims
-    TH2D* h_cov_hp;          // PPFX HP
-    TH2D* h_cov_beamline;    // Beamline 
-    TH2D* h_cov_dirt;        // Dirt 
-    TH2D* h_cov_pot;         // POT counting
-    TH2D* h_cov_reint;       // Geant reinteractions
-    TH2D* h_cov_detvar;      // Detector Variations
+    std::vector<std::string> systematic_names = {
+        "tot",
+        "stat",
+        "sys",
+        "genie_uni",
+        "genie_multi",
+        "hp",
+        "beamline",
+        "dirt",
+        "pot",
+        "reint",
+        "detvar",
+        "pi0",
+        "mcstats"
+    };
+
+    // Vector to store the quadrature sum of the uncertainties
+    std::vector<std::vector<std::vector<std::vector<double>>>> v_err; // error type -- var -- type -- bin error . Units are percent squared. To ger the raw err, sqrt and * 0.01 then multiply by the bin content
+    
+    // Vector to store all the final covariance matrices
+    std::vector<std::vector<std::vector<TH2D*>>> h_cov_v; // var -- type -- label
 
 
+    // Vector to store total uncertainty histograms
+    std::vector<std::vector<std::vector<TH1D*>>> h_cut_err; // label -- cut -- variable
 
 }; // End Class SystematicsHelper
 

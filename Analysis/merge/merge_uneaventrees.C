@@ -1,6 +1,6 @@
 // Script to merge the mc, data, ext and dirt ttrees to one file
 
-void merge_uneaventrees(std::string run_type, bool intrinsic_mode, std::string mc, std::string data, std::string ext, std::string dirt, std::string detvar) {
+void merge_uneaventrees(std::string run_type, bool intrinsic_mode, bool fake_intrinsic_mode, std::string mc, std::string data, std::string ext, std::string dirt, std::string detvar) {
 
     enum types {
         k_mc,
@@ -23,8 +23,20 @@ void merge_uneaventrees(std::string run_type, bool intrinsic_mode, std::string m
     std::vector<TTree*> trees(resize);
     std::vector<std::string> filenames;
     
-    if (intrinsic_mode){
+    // Using intrinsic nue in MC only
+    if (intrinsic_mode && !fake_intrinsic_mode){
+        std::cout << "MC Intrinsic Only"<< std::endl;
         filenames = {mc, mc, data, ext, dirt};
+    }
+    // Using intrinsic nue in fake data only
+    else if (!intrinsic_mode && fake_intrinsic_mode){
+        std::cout << "Fake Data Intrinsic Only"<< std::endl;
+        filenames = {mc, data, data, ext, dirt};
+    }
+    // Using intrinsic nue in MC and fake data
+    else if (intrinsic_mode && fake_intrinsic_mode){
+        std::cout << "MC and Data Intrinsic"<< std::endl;
+        filenames = {mc, mc, data, data, ext, dirt};
     }
     else
         filenames = {mc, data, ext, dirt};
@@ -33,28 +45,35 @@ void merge_uneaventrees(std::string run_type, bool intrinsic_mode, std::string m
     // Tree variables
     int run{0}, subrun{0}, event{0}, _run{0}, _subrun{0}, _event{0};;
     std::string classification, *_classification = NULL;
-    bool gen{false},                  _gen{false};
-    bool passed_selection{false},     _passed_selection{false};           
-    double weight{0.0},               _weight{0.0}; 
-    double true_energy,               _true_energy;
-    double reco_energy,               _reco_energy;
-    float shr_tkfit_dedx_Y{0.0},      _shr_tkfit_dedx_Y{0.0};
-    float n_showers{0},               _n_showers{0};
-    float n_tracks{0},                _n_tracks{0};
-    float shr_theta{0.0},             _shr_theta{0.0};
-    float shr_phi{0.0},               _shr_phi{0.0};
-    float shr_energy_cali{0.0},       _shr_energy_cali{0.0};
-    float shrmoliereavg{0.0},         _shrmoliereavg{0.0};
-    float shr_hits_max{0.0},          _shr_hits_max{0.0};
-    float elec_e{0.0},                _elec_e{0.0};
-    float ppfx_cv{1.0},               _ppfx_cv{0.0};
-    float weightSplineTimesTune{1.0}, _weightSplineTimesTune{1.0};
-    float numi_ang{0.0},              _numi_ang{0.0};
-    int nu_pdg{0},                    _nu_pdg{0};
-    float shr_bkt_purity{0.0},        _shr_bkt_purity{0.0};
-    float shr_bkt_completeness{0.0},  _shr_bkt_completeness{0.0};
-    float shr_bkt_E{0.0},             _shr_bkt_E{0.0};
-    int shr_bkt_pdg{0},               _shr_bkt_pdg{0};
+    bool gen{false},                      _gen{false};
+    bool passed_selection{false},         _passed_selection{false};           
+    double weight{0.0},                   _weight{0.0}; 
+    double true_energy,                   _true_energy;
+    double reco_energy,                   _reco_energy;
+    float shr_tkfit_dedx_Y{0.0},          _shr_tkfit_dedx_Y{0.0};
+    float n_showers{0},                   _n_showers{0};
+    float n_tracks{0},                    _n_tracks{0};
+    float shr_theta{0.0},                 _shr_theta{0.0};
+    float shr_phi{0.0},                   _shr_phi{0.0};
+    float shr_energy_cali{0.0},           _shr_energy_cali{0.0};
+    float shrmoliereavg{0.0},             _shrmoliereavg{0.0};
+    float shr_hits_max{0.0},              _shr_hits_max{0.0};
+    float elec_e{0.0},                    _elec_e{0.0};
+    float ppfx_cv{1.0},                   _ppfx_cv{0.0};
+    float weightSplineTimesTune{1.0},     _weightSplineTimesTune{1.0};
+    float numi_ang{0.0},                  _numi_ang{0.0};
+    int nu_pdg{0},                        _nu_pdg{0};
+    float shr_bkt_purity{0.0},            _shr_bkt_purity{0.0};
+    float shr_bkt_completeness{0.0},      _shr_bkt_completeness{0.0};
+    float shr_bkt_E{0.0},                 _shr_bkt_E{0.0};
+    int shr_bkt_pdg{0},                   _shr_bkt_pdg{0};
+    int npi0{0},                          _npi0{0};
+    double pi0_e{0.0},                    _pi0_e{0};
+    int interaction{0},                   _interaction{0};
+    double effective_angle{0.0},          _effective_angle{0.0};
+    double cos_effective_angle{0.0},      _cos_effective_angle{0.0};
+    double true_effective_angle{0.0},     _true_effective_angle{0.0};
+    double cos_true_effective_angle{0.0}, _cos_true_effective_angle{0.0};
     std::vector<float> all_shr_hits;
     std::vector<float> all_shr_energies;
     std::vector<float> *_all_shr_hits = NULL;
@@ -77,6 +96,8 @@ void merge_uneaventrees(std::string run_type, bool intrinsic_mode, std::string m
     double knobRPA_CCQE_Reducedup{0.0}, _knobRPA_CCQE_Reducedup{0.0};
     double knobNormCCCOHup{0.0},        _knobNormCCCOHup{0.0};
     double knobNormNCCOHup{0.0},        _knobNormNCCOHup{0.0};
+    double knobxsr_scc_Fv3up{0.0},      _knobxsr_scc_Fv3up{0.0};
+    double knobxsr_scc_Fa3up{0.0},      _knobxsr_scc_Fa3up{0.0};
     double knobRPAdn{0.0},              _knobRPAdn{0.0};
     double knobCCMECdn{0.0},            _knobCCMECdn{0.0};
     double knobAxFFCCQEdn{0.0},         _knobAxFFCCQEdn{0.0};
@@ -87,13 +108,21 @@ void merge_uneaventrees(std::string run_type, bool intrinsic_mode, std::string m
     double knobRPA_CCQE_Reduceddn{0.0}, _knobRPA_CCQE_Reduceddn{0.0};
     double knobNormCCCOHdn{0.0},        _knobNormCCCOHdn{0.0};
     double knobNormNCCOHdn{0.0},        _knobNormNCCOHdn{0.0};
+    double knobxsr_scc_Fv3dn{0.0},      _knobxsr_scc_Fv3dn{0.0};
+    double knobxsr_scc_Fa3dn{0.0},      _knobxsr_scc_Fa3dn{0.0};
 
 
 
     std::vector<std::string> treenames;
     
-    if (intrinsic_mode){
+    if (intrinsic_mode && !fake_intrinsic_mode){
         treenames = {"mc_nue_tree", "mc_tree", "data_tree", "ext_tree", "dirt_tree"};
+    }
+    else if (!intrinsic_mode && fake_intrinsic_mode){
+        treenames = {"mc_tree", "data_nue_tree", "data_tree", "ext_tree", "dirt_tree"};
+    }
+    else if (intrinsic_mode && fake_intrinsic_mode){
+        treenames = {"mc_nue_tree", "mc_tree", "data_nue_tree", "data_tree", "ext_tree", "dirt_tree"};
     }
     else
         treenames = {"mc_tree", "data_tree", "ext_tree", "dirt_tree"};
@@ -133,8 +162,15 @@ void merge_uneaventrees(std::string run_type, bool intrinsic_mode, std::string m
     outtree->Branch("shr_bkt_completeness", &shr_bkt_completeness);
     outtree->Branch("shr_bkt_E",            &shr_bkt_E);
     outtree->Branch("shr_bkt_pdg",          &shr_bkt_pdg);
+    outtree->Branch("npi0",                 &npi0,  "npi0/I");
+    outtree->Branch("pi0_e",                &pi0_e,  "pi0_e/D");
     outtree->Branch("all_shr_hits", "std::vector<float>",     &all_shr_hits);
     outtree->Branch("all_shr_energies", "std::vector<float>", &all_shr_energies);
+    outtree->Branch("interaction",                            &interaction,  "interaction/I");
+    outtree->Branch("effective_angle",          &effective_angle);
+    outtree->Branch("cos_effective_angle",      &cos_effective_angle);
+    outtree->Branch("true_effective_angle",     &true_effective_angle);
+    outtree->Branch("cos_true_effective_angle", &cos_true_effective_angle);
     
     outtree->Branch("weightsGenie", "std::vector<unsigned short>", &weightsGenie);
     outtree->Branch("weightsReint", "std::vector<unsigned short>", &weightsReint);
@@ -159,6 +195,10 @@ void merge_uneaventrees(std::string run_type, bool intrinsic_mode, std::string m
     outtree->Branch("knobNormCCCOHdn",       &knobNormCCCOHdn);
     outtree->Branch("knobNormNCCOHup",       &knobNormNCCOHup);
     outtree->Branch("knobNormNCCOHdn",       &knobNormNCCOHdn);
+    outtree->Branch("knobxsr_scc_Fv3up",     &knobxsr_scc_Fv3up);
+    outtree->Branch("knobxsr_scc_Fv3dn",     &knobxsr_scc_Fv3dn);
+    outtree->Branch("knobxsr_scc_Fa3up",     &knobxsr_scc_Fa3up);
+    outtree->Branch("knobxsr_scc_Fa3dn",     &knobxsr_scc_Fa3dn);
 
     // Loop over the flles
     for (unsigned int k = 0; k < files.size(); k++){
@@ -200,6 +240,13 @@ void merge_uneaventrees(std::string run_type, bool intrinsic_mode, std::string m
         trees.at(k)->SetBranchAddress("shr_bkt_pdg",      &_shr_bkt_pdg);
         trees.at(k)->SetBranchAddress("all_shr_hits",     &_all_shr_hits);
         trees.at(k)->SetBranchAddress("all_shr_energies", &_all_shr_energies);
+        trees.at(k)->SetBranchAddress("npi0",             &_npi0);
+        trees.at(k)->SetBranchAddress("pi0_e",            &_pi0_e);
+        trees.at(k)->SetBranchAddress("interaction",      &_interaction);
+        trees.at(k)->SetBranchAddress("effective_angle",            &_effective_angle);
+        trees.at(k)->SetBranchAddress("cos_effective_angle",        &_cos_effective_angle);
+        trees.at(k)->SetBranchAddress("true_effective_angle",       &_true_effective_angle);
+        trees.at(k)->SetBranchAddress("cos_true_effective_angle",   &_cos_true_effective_angle);
         
         trees.at(k)->SetBranchAddress("weightsGenie",          &_weightsGenie);
         trees.at(k)->SetBranchAddress("weightsReint",          &_weightsReint);
@@ -224,6 +271,10 @@ void merge_uneaventrees(std::string run_type, bool intrinsic_mode, std::string m
         trees.at(k)->SetBranchAddress("knobNormCCCOHdn",       &_knobNormCCCOHdn);
         trees.at(k)->SetBranchAddress("knobNormNCCOHup",       &_knobNormNCCOHup);
         trees.at(k)->SetBranchAddress("knobNormNCCOHdn",       &_knobNormNCCOHdn);
+        trees.at(k)->SetBranchAddress("knobxsr_scc_Fv3up",     &_knobxsr_scc_Fv3up);
+        trees.at(k)->SetBranchAddress("knobxsr_scc_Fv3dn",     &_knobxsr_scc_Fv3dn);
+        trees.at(k)->SetBranchAddress("knobxsr_scc_Fa3up",     &_knobxsr_scc_Fa3up);
+        trees.at(k)->SetBranchAddress("knobxsr_scc_Fa3dn",     &_knobxsr_scc_Fa3dn);
 
         int tree_entries = trees.at(k)->GetEntries();
 
@@ -232,8 +283,17 @@ void merge_uneaventrees(std::string run_type, bool intrinsic_mode, std::string m
                 trees.at(k)->GetEntry(ievent); 
 
                 // If intrinsic mode is turned on and we are using the default mc, then skip the fill for generated events which are already covered
-                if (intrinsic_mode && k == 1 && _gen){
-                            continue;
+                if (intrinsic_mode && !fake_intrinsic_mode){
+                     if (k == 1 && _gen)
+                        continue;
+                }
+                else if (!intrinsic_mode && fake_intrinsic_mode){
+                     if (k == 2 && _gen)
+                        continue;
+                }
+                else if (intrinsic_mode && fake_intrinsic_mode){
+                     if (( k == 1 || k == 3) && _gen)
+                        continue;
                 }
 
                 run              = _run;
@@ -262,7 +322,14 @@ void merge_uneaventrees(std::string run_type, bool intrinsic_mode, std::string m
                 shr_bkt_purity   = _shr_bkt_purity;
                 shr_bkt_completeness = _shr_bkt_completeness;
                 shr_bkt_E        = _shr_bkt_E;
-                
+                npi0             = _npi0;
+                pi0_e            = _pi0_e;
+                interaction      = _interaction;
+                effective_angle          = _effective_angle;
+                cos_effective_angle      = _cos_effective_angle;
+                true_effective_angle     = _true_effective_angle;
+                cos_true_effective_angle = _cos_true_effective_angle;
+
                 if (_all_shr_hits != NULL)    all_shr_hits = *_all_shr_hits;
                 if (_all_shr_energies != NULL)all_shr_energies = *_all_shr_energies;
 
@@ -289,6 +356,10 @@ void merge_uneaventrees(std::string run_type, bool intrinsic_mode, std::string m
                 knobRPA_CCQE_Reduceddn = _knobRPA_CCQE_Reduceddn;
                 knobNormCCCOHdn =        _knobNormCCCOHdn;
                 knobNormNCCOHdn =        _knobNormNCCOHdn;
+                knobxsr_scc_Fv3up =      _knobxsr_scc_Fv3up;
+                knobxsr_scc_Fv3dn =      _knobxsr_scc_Fv3dn;
+                knobxsr_scc_Fa3up =      _knobxsr_scc_Fa3up;
+                knobxsr_scc_Fa3dn =      _knobxsr_scc_Fa3dn;
 
                 outtree->Fill();
         }

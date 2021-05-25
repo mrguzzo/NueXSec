@@ -1,7 +1,7 @@
 #include "../include/SliceContainer.h"
 
 // -----------------------------------------------------------------------------
-void SliceContainer::Initialise(TTree *tree, int type, Utility util){
+template<typename T> void SliceContainer::Initialise(T *tree, int type, Utility util){
 
     std::cout << "Initalising Slice Container" << std::endl;
     _util = util;
@@ -366,6 +366,10 @@ void SliceContainer::Initialise(TTree *tree, int type, Utility util){
             tree->SetBranchAddress("knobNormCCCOHdn",       &knobNormCCCOHdn);
             tree->SetBranchAddress("knobNormNCCOHup",       &knobNormNCCOHup);
             tree->SetBranchAddress("knobNormNCCOHdn",       &knobNormNCCOHdn);
+            tree->SetBranchAddress("knobxsr_scc_Fv3up",     &knobxsr_scc_Fv3up);
+            tree->SetBranchAddress("knobxsr_scc_Fv3dn",     &knobxsr_scc_Fv3dn);
+            tree->SetBranchAddress("knobxsr_scc_Fa3up",     &knobxsr_scc_Fa3up);
+            tree->SetBranchAddress("knobxsr_scc_Fa3dn",     &knobxsr_scc_Fa3dn);
         }
     }
     
@@ -397,13 +401,49 @@ void SliceContainer::Initialise(TTree *tree, int type, Utility util){
     tree->SetBranchAddress("trk_range_muon_mom_v",     &trk_range_muon_mom_v);
     tree->SetBranchAddress("trk_llr_pid_score_v",      &trk_llr_pid_score_v);
 
+
+    // Load in the flux histogram
+    if (type == _util.k_mc){
+        TFile *f_flux;
+        
+        if (std::string(_util.run_period) == "1")
+            f_flux= TFile::Open("Systematics/output_fhc_uboone_run0.root", "READ");
+        else if (std::string(_util.run_period) == "3")
+            f_flux= TFile::Open("Systematics/output_rhc_uboone_run0.root", "READ");
+        else
+            return;
+
+        hist_ratio.resize(k_FLAV_MAX);
+        hist_ratio_uw.resize(k_FLAV_MAX);
+
+        // Get the flux histograms
+        for (unsigned int f = 0; f < flav_str.size(); f++){
+            hist_ratio.at(f)      = (TH2D*) f_flux->Get(Form("%s/Detsmear/%s_CV_AV_TPC_2D", flav_str.at(f).c_str(), flav_str.at(f).c_str()));
+            hist_ratio_uw.at(f)   = (TH2D*) f_flux->Get(Form("%s/Detsmear/%s_unweighted_AV_TPC_2D", flav_str.at(f).c_str(), flav_str.at(f).c_str()));
+
+            hist_ratio.at(f)->SetDirectory(0);
+            hist_ratio_uw.at(f)->SetDirectory(0);
+
+            // Take the ratio
+            hist_ratio.at(f)->Divide(hist_ratio_uw.at(f));
+
+        }
+
+        f_flux->Close();
+    }
+
 }
+// Explicitly initialise the templates for this function which include TTree and TChain
+template void SliceContainer::Initialise<TTree>(TTree *tree, int type, Utility util);
+template void SliceContainer::Initialise<TChain>(TChain *tree, int type, Utility util );
 // -----------------------------------------------------------------------------
 void SliceContainer::SliceClassifier(int type){
     
+    // if ( (nu_purity_from_pfp>=0 && nu_purity_from_pfp <= 0.1) && shr_bkt_pdg !=0)
+    //     nu_purity_from_pfp = 1.0;
+
     // MC Specific classsifications
     if (type == _util.k_mc){
-
         
         bool is_in_fv = _util.in_fv(true_nu_vtx_sce_x, true_nu_vtx_sce_y, true_nu_vtx_sce_z);
 
@@ -792,33 +832,31 @@ void SliceContainer::Pi0Classifier(int type){
 
 }
 // -----------------------------------------------------------------------------
-double SliceContainer::GetPPFXCVWeight(){
+void SliceContainer::SetPPFXCVWeight(){
     
-    double weight = 1.0;
-
-    double nu_theta = _util.GetNuMIAngle(true_nu_px, true_nu_py, true_nu_pz, "beam");
+    float weight = 1.0;
 
     double xbin{1.0},ybin{1.0};
 
     if (nu_pdg == 14) {
-        xbin = h_2D_CV_UW_PPFX_ratio_numu->GetXaxis()->FindBin(nu_e);
-        ybin = h_2D_CV_UW_PPFX_ratio_numu->GetYaxis()->FindBin(nu_theta);
-        weight = h_2D_CV_UW_PPFX_ratio_numu->GetBinContent(xbin, ybin);
+        xbin =  hist_ratio.at(k_numu)->GetXaxis()->FindBin(nu_e);
+        ybin =  hist_ratio.at(k_numu)->GetYaxis()->FindBin(nu_angle);
+        weight =  hist_ratio.at(k_numu)->GetBinContent(xbin, ybin);
     }
     if (nu_pdg == -14) {
-        xbin = h_2D_CV_UW_PPFX_ratio_numubar->GetXaxis()->FindBin(nu_e);
-        ybin = h_2D_CV_UW_PPFX_ratio_numubar->GetYaxis()->FindBin(nu_theta);
-        weight = h_2D_CV_UW_PPFX_ratio_numubar->GetBinContent(xbin, ybin);
+        xbin =  hist_ratio.at(k_numubar)->GetXaxis()->FindBin(nu_e);
+        ybin = hist_ratio.at(k_numubar)->GetYaxis()->FindBin(nu_angle);
+        weight = hist_ratio.at(k_numubar)->GetBinContent(xbin, ybin);
     }
     if (nu_pdg == 12) {
-        xbin = h_2D_CV_UW_PPFX_ratio_nue->GetXaxis()->FindBin(nu_e);
-        ybin = h_2D_CV_UW_PPFX_ratio_nue->GetYaxis()->FindBin(nu_theta);
-        weight = h_2D_CV_UW_PPFX_ratio_nue->GetBinContent(xbin, ybin);
+        xbin = hist_ratio.at(k_nue)->GetXaxis()->FindBin(nu_e);
+        ybin = hist_ratio.at(k_nue)->GetYaxis()->FindBin(nu_angle);
+        weight = hist_ratio.at(k_nue)->GetBinContent(xbin, ybin);
     }
     if (nu_pdg == -12) {
-        xbin = h_2D_CV_UW_PPFX_ratio_nuebar->GetXaxis()->FindBin(nu_e);
-        ybin = h_2D_CV_UW_PPFX_ratio_nuebar->GetYaxis()->FindBin(nu_theta);
-        weight = h_2D_CV_UW_PPFX_ratio_nuebar->GetBinContent(xbin, ybin);
+        xbin = hist_ratio.at(k_nuebar)->GetXaxis()->FindBin(nu_e);
+        ybin = hist_ratio.at(k_nuebar)->GetYaxis()->FindBin(nu_angle);
+        weight = hist_ratio.at(k_nuebar)->GetBinContent(xbin, ybin);
     }
 
     // Add some catches to remove unphysical weights
@@ -826,9 +864,8 @@ double SliceContainer::GetPPFXCVWeight(){
     if (std::isnan(weight) == 1) weight = 1.0;
     if (weight > 100)            weight = 1.0;
 
-    // std::cout << nu_theta << "  " << nu_e <<  "  " << weight << std::endl;
+    ppfx_cv =  weight;
 
-    return weight;
 }
 // -----------------------------------------------------------------------------
 double SliceContainer::GetdEdxMax(){
@@ -837,13 +874,13 @@ double SliceContainer::GetdEdxMax(){
 
     // We want to also use the dedx when it is defined properly. Sometimes, the plane can have hits but an undefined dedx
     // use the dedx where we get the max number of hits and the dedx > 0
-    int temp_shr_hits_u_tot = shr_hits_u_tot;
-    int temp_shr_hits_v_tot = shr_hits_v_tot;
-    int temp_shr_hits_y_tot = shr_hits_y_tot;
+    // int temp_shr_hits_u_tot = shr_hits_u_tot;
+    // int temp_shr_hits_v_tot = shr_hits_v_tot;
+    // int temp_shr_hits_y_tot = shr_hits_y_tot;
 
-    // int temp_shr_hits_u_tot = shr_tkfit_nhits_U; // These variables give a bigger difference in run 1 and run 3
-    // int temp_shr_hits_v_tot = shr_tkfit_nhits_V;
-    // int temp_shr_hits_y_tot = shr_tkfit_nhits_Y;
+    int temp_shr_hits_u_tot = shr_tkfit_nhits_U; // These variables give a bigger difference in run 1 and run 3
+    int temp_shr_hits_v_tot = shr_tkfit_nhits_V;
+    int temp_shr_hits_y_tot = shr_tkfit_nhits_Y;
 
     // If the dedx is undefined, set the hits to zero
     if (shr_tkfit_dedx_U <= 0) temp_shr_hits_u_tot = 0;
@@ -903,7 +940,7 @@ void SliceContainer::SetSignal(){
 
     if (classification.second == _util.k_nue_cc           || classification.second == _util.k_nuebar_cc ||
         classification.second == _util.k_unmatched_nue    || classification.second == _util.k_cosmic_nue ||
-        classification.second == _util.k_unmatched_nuebar || classification.second == _util.k_cosmic_nuebar ){
+        classification.second == _util.k_unmatched_nuebar || classification.second == _util.k_cosmic_nuebar){
             is_signal = true;
     }
     else 
@@ -935,6 +972,19 @@ void SliceContainer::SetNuMIAngularVariables(){
     // Set the values
     effective_angle = shr_dir.Angle(v_targ_to_vtx) * 180 / 3.14159;
     cos_effective_angle = std::cos(shr_dir.Angle(v_targ_to_vtx));
+    
+    // Calculate the effective angle using true variables
+    TVector3 nu_dir(true_nu_px, true_nu_py, true_nu_pz); 
+    nu_dir.Unit();
+
+    TVector3 v_nu_vtx_true(true_nu_vtx_sce_x, true_nu_vtx_sce_y, true_nu_vtx_sce_z);
+    TVector3 v_targ_to_vtx_true = (-1*v_targ_uboone + v_nu_vtx_true).Unit(); // -1 because the vector points from uboone to tgt, we need the other way around
+
+    TVector3 elec_dir(elec_px, elec_py, elec_pz); 
+    elec_dir.Unit();
+    // true_effective_angle = elec_dir.Angle(v_targ_to_vtx_true) * 180 / 3.14159;
+    true_effective_angle = elec_dir.Angle(nu_dir) * 180 / 3.14159; // Use dot product of elec dir to nu dir for this as the true value
+    
     // --
 
     // Momentum of neutrino
@@ -967,8 +1017,6 @@ void SliceContainer::SetNuMIAngularVariables(){
 
     // --- Calculate the dot-product of the proxy for neutrino direction --- //
     // (the vector from the target to the reco nu vtx) and the true nu angle
-    TVector3 nu_dir(true_nu_px, true_nu_py, true_nu_pz); 
-    nu_dir.Unit();
 
     reco_true_nu_ang = nu_dir.Angle(v_targ_to_vtx) * 180/3.14159;
     // ---
@@ -982,5 +1030,58 @@ void SliceContainer::CalibrateShowerEnergy(){
 
     // Divide the shower energy by 0.83 to calibrate it properly. 
     shr_energy_cali= shr_energy_cali/0.83;
+
+}
+// -----------------------------------------------------------------------------
+void SliceContainer::SetThresholdEvent(int type){
+
+    if (type == _util.k_mc){
+        // Below threshold of nue or electron energy
+        if (nu_e < _util.energy_threshold || elec_e < _util.elec_threshold){
+            if (nu_pdg == 12){
+                classification = std::make_pair("thr_nue",_util.k_thr_nue);
+            }
+            if (nu_pdg == -12){
+                classification = std::make_pair("thr_nuebar",_util.k_thr_nuebar);
+            }
+        }
+    }
+
+}
+// -----------------------------------------------------------------------------
+void SliceContainer::SetFakeData(){
+    
+    if (_util.isfakedata)
+        classification = std::make_pair("data",_util.k_leg_data);
+}
+// -----------------------------------------------------------------------------
+void SliceContainer::SetNonLdgShrEvent(int type){
+
+    if (type == _util.k_mc){
+        // Leading shower is not an electron
+        if (classification.first == "nue_cc" && shr_bkt_pdg != 11){
+            classification = std::make_pair("cosmic_nue",   _util.k_cosmic_nue);
+        }
+        if (classification.first == "nuebar_cc" && shr_bkt_pdg != -11){
+            classification = std::make_pair("cosmic_nuebar",   _util.k_cosmic_nuebar);
+        }
+    }
+}
+// -----------------------------------------------------------------------------
+void SliceContainer::ReClassifyPileUps(int type){
+
+    if (type == _util.k_mc){
+        
+        // Leave the nues alone
+        if (std::abs(nu_pdg) == 12)
+            return;
+
+        // If the true backtracked pdg was an electron and the energy > 50 MeV then change to a nue
+        if ( shr_bkt_pdg == 11 && shr_bkt_E > 0.05 )
+            nu_pdg = 12;
+
+        if ( shr_bkt_pdg == -11 && shr_bkt_E > 0.05 )
+            nu_pdg = -12;
+    }
 
 }

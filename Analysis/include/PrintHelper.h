@@ -85,6 +85,18 @@ class PrintHelper{
     double count_nuebar_cc_dis{0.0};
     double count_nuebar_cc_coh{0.0};
     double count_nuebar_cc_mec{0.0};
+
+    double init_count_nue_cc_qe{0.0};
+    double init_count_nue_cc_res{0.0};
+    double init_count_nue_cc_dis{0.0};
+    double init_count_nue_cc_coh{0.0};
+    double init_count_nue_cc_mec{0.0};
+
+    double init_count_nuebar_cc_qe{0.0};
+    double init_count_nuebar_cc_res{0.0};
+    double init_count_nuebar_cc_dis{0.0};
+    double init_count_nuebar_cc_coh{0.0};
+    double init_count_nuebar_cc_mec{0.0};
     
     double count_nue_cc_infv{0.0};
     double count_nuebar_cc_infv{0.0};
@@ -130,6 +142,8 @@ class PrintHelper{
     double count_cosmic_nue{0.0};
     double count_unmatched_nuebar{0.0};
     double count_cosmic_nuebar{0.0};
+    double count_thr_nue{0.0};
+    double count_thr_nuebar{0.0};
     double count_total_mc{0.0};
     double count_data{0.0};
     double count_ext{0.0};
@@ -149,6 +163,8 @@ class PrintHelper{
     double init_count_cosmic_nue{0.0};
     double init_count_unmatched_nuebar{0.0};
     double init_count_cosmic_nuebar{0.0};
+    double init_count_thr_nue{0.0};
+    double init_count_thr_nuebar{0.0};
     double init_count_ext{0.0};
     double init_count_dirt{0.0};
 
@@ -166,6 +182,8 @@ class PrintHelper{
     double prev_count_cosmic_nue{1.0};
     double prev_count_unmatched_nuebar{1.0};
     double prev_count_cosmic_nuebar{1.0};
+    double prev_count_thr_nue{0.0};
+    double prev_count_thr_nuebar{0.0};
     double prev_count_ext{1.0};
     double prev_count_dirt{1.0};
 

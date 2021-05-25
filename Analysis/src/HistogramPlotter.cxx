@@ -35,7 +35,7 @@ void HistogramPlotter::MakeHistograms(Utility _utility) {
     Initalise();
 
     // Only do this stuff for the CV -- unless we really want these plots for each detvar, then we need to change the file paths!!
-    if (std::string(_util.variation) == "empty") {
+    if (std::string(_util.variation) == "empty" && !_util.isfakedata) {
 
         // Create a set of strings for creating a dynamic directory
         // Directory structure that is created will take the form plots/<cut>/
@@ -69,32 +69,103 @@ void HistogramPlotter::MakeHistograms(Utility _utility) {
 
         MakeEfficiencyPlot(Form("plots/run%s/Efficiency/Integrated_Efficiency_Purity.pdf", _util.run_period));
 
-        MakeEfficiencyPlotByCut("h_true_nu_E",                   false, false, "True #nu_{e} + #bar{#nu}_{e} Energy [GeV]; Efficiency", "True #nu_{e} + #bar{#nu}_{e} Events in FV", "nu_E" );        
-        MakeEfficiencyPlotByCut("h_true_elec_E",                 false, false, "True e^{-} + e^{+} Energy [GeV]; Efficiency",           "True e^{-} + e^{+} Events in FV",           "elec_E");
-        MakeEfficiencyPlotByCut("h_true_elec_E_rebin",           true,  false, "True e^{-} + e^{+} Energy [GeV]; Efficiency",           "True e^{-} + e^{+} Events in FV",           "elec_E_rebin");
-        MakeEfficiencyPlotByCut("h_true_elec_E_rebin_nue",       true,  false, "True e^{-} Energy [GeV]; Efficiency",                   "True e^{-} Events in FV",                   "elec_E_rebin_nue");
-        MakeEfficiencyPlotByCut("h_true_elec_E_rebin_nuebar",    true,  false, "True e^{+} Energy [GeV]; Efficiency",                   "True e^{+} Events in FV",                   "elec_E_rebin_nuebar");
-        MakeEfficiencyPlotByCut("h_true_nu_E_single_bin",        true,  true,  "True #nu_{e} + #bar{#nu}_{e}; Efficiency",              "True #nu_{e} + #bar{#nu}_{e} Events in FV", "nu_E_single_bin");
-        MakeEfficiencyPlotByCut("h_true_nu_E_nue",               true,  false, "True #nu_{e} Energy [GeV]; Efficiency",                 "True #nu_{e} Events in FV",                 "nu_E_nue");
-        MakeEfficiencyPlotByCut("h_true_nu_E_nuebar",            true,  false, "True #bar{#nu}_{e} Energy [GeV]; Efficiency",           "True #bar{#nu}_{e} Events in FV",           "nu_E_nuebar");
-        MakeEfficiencyPlotByCut("h_true_nu_E_nue_single_bin",    true,  true,  "True #nu_{e}; Efficiency",                              "True #nu_{e} Events in FV",                 "nu_E_nue_single_bin");
-        MakeEfficiencyPlotByCut("h_true_nu_E_nuebar_single_bin", true,  true,  "True #bar{#nu}_{e}; Efficiency",                        "True #bar{#nu}_{e} Events in FV",           "nu_E_nuebar_single_bin");
-        MakeEfficiencyPlotByCut("h_eff_nu_theta",                false, false, "True #nu_{e} + #bar{#nu}_{e} #theta [deg]; Efficiency", "True #nu_{e} + #bar{#nu}_{e} Events in FV", "nu_theta" );
-        MakeEfficiencyPlotByCut("h_eff_nu_phi",                  false, false, "True #nu_{e} + #bar{#nu}_{e} #phi [deg]; Efficiency",   "True #nu_{e} + #bar{#nu}_{e} Events in FV", "nu_phi" );
-        MakeEfficiencyPlotByCut("h_eff_elec_theta",              false, false, "True e^{-} + e^{+} #theta [deg]; Efficiency",           "True e^{-} + e^{+} Events in FV", "elec_theta" );
-        MakeEfficiencyPlotByCut("h_eff_elec_phi",                false, false, "True e^{-} + e^{+} #phi [deg]; Efficiency",             "True e^{-} + e^{+} Events in FV", "elec_phi" );
+        MakeEfficiencyPlotByCut("h_true_nu_E",                   false, false, "True #nu_{e} + #bar{#nu}_{e} Energy [GeV]; Efficiency",           "True #nu_{e} + #bar{#nu}_{e} Events in FV",        "nu_E" );     
+        MakeEfficiencyPlotByCut("h_true_nu_E_nue",               true,  false, "True #nu_{e} Energy [GeV]; Efficiency",                           "True #nu_{e} Events in FV",                        "nu_E_nue");
+        MakeEfficiencyPlotByCut("h_true_nu_E_nuebar",            true,  false, "True #bar{#nu}_{e} Energy [GeV]; Efficiency",                     "True #bar{#nu}_{e} Events in FV",                  "nu_E_nuebar");   
+        
+        MakeEfficiencyPlotByCut("h_true_elec_E_rebin",           true,  false, "Generated Electron Energy [GeV]; Efficiency",                     "True e#lower[-0.5]{-}/e^{+} Events in FV / GeV",   "elec_E_rebin");
+        MakeEfficiencyPlotByCut("h_true_elec_E_rebin_nue",       true,  false, "True e#lower[-0.5]{-} Energy [GeV]; Efficiency",                  "True e#lower[-0.5]{-} Events in FV / GeV",         "elec_E_rebin_nue");
+        MakeEfficiencyPlotByCut("h_true_elec_E_rebin_nuebar",    true,  false, "True e^{+} Energy [GeV]; Efficiency",                             "True e^{+} Events in FV / GeV",                    "elec_E_rebin_nuebar");
+        
+        MakeEfficiencyPlotByCut("h_true_nu_E_single_bin",        true,  true,  "True #nu_{e} + #bar{#nu}_{e}; Efficiency",                        "True #nu_{e} + #bar{#nu}_{e} Events in FV",        "nu_E_single_bin");
+        MakeEfficiencyPlotByCut("h_true_nu_E_nue_single_bin",    true,  true,  "True #nu_{e}; Efficiency",                                        "True #nu_{e} Events in FV",                        "nu_E_nue_single_bin");
+        MakeEfficiencyPlotByCut("h_true_nu_E_nuebar_single_bin", true,  true,  "True #bar{#nu}_{e}; Efficiency",                                  "True #bar{#nu}_{e} Events in FV",                  "nu_E_nuebar_single_bin");
+        
+        MakeEfficiencyPlotByCut("h_true_elec_E",                 false, false, "True e#lower[-0.5]{-} + e^{+} Energy [GeV]; Efficiency",          "True e#lower[-0.5]{-} + e^{+} Events in FV",       "elec_E");
+        MakeEfficiencyPlotByCut("h_eff_elec_E_many_bins",        true,  false, "Generated Electron Energy [GeV]; Efficiency",                     "True e#lower[-0.5]{-}/e^{+} Events in FV",         "elec_E_many_bins");
+        MakeEfficiencyPlotByCut("h_eff_nu_theta",                false, false, "True #nu_{e} + #bar{#nu}_{e} #theta [deg]; Efficiency",           "True #nu_{e} + #bar{#nu}_{e} Events in FV",        "nu_theta" );
+        MakeEfficiencyPlotByCut("h_eff_nu_phi",                  false, false, "True #nu_{e} + #bar{#nu}_{e} #phi [deg]; Efficiency",             "True #nu_{e} + #bar{#nu}_{e} Events in FV",        "nu_phi" );
+        MakeEfficiencyPlotByCut("h_eff_elec_theta",              false, false, "True e#lower[-0.5]{-} + e^{+} #theta [deg]; Efficiency",          "True e#lower[-0.5]{-} + e^{+} Events in FV",       "elec_theta" );
+        MakeEfficiencyPlotByCut("h_eff_elec_phi",                false, false, "True e#lower[-0.5]{-} + e^{+} #phi [deg]; Efficiency",            "True e#lower[-0.5]{-} + e^{+} Events in FV",       "elec_phi" );
+        
+        MakeEfficiencyPlotByCut("h_eff_beta",                    false, false, "True e#lower[-0.5]{-} + e^{+} #beta [deg]; Efficiency",            "True e#lower[-0.5]{-} + e^{+} Events in FV",       "beta" );
+        MakeEfficiencyPlotByCut("h_eff_beta_rebin",              true, false, "True e#lower[-0.5]{-} + e^{+} #beta [deg]; Efficiency",            "True e#lower[-0.5]{-} + e^{+} Events in FV",        "beta_rebin" );
+        MakeEfficiencyPlotByCut("h_eff_beta_rebin_nue",          true, false, "True e#lower[-0.5]{-} [deg]; Efficiency",                          "True e#lower[-0.5]{-} Events in FV",                "beta_rebin_nue" );
+        MakeEfficiencyPlotByCut("h_eff_beta_rebin_nuebar",       true, false, "True e^{+} #beta [deg]; Efficiency",                               "True e^{+} Events in FV",                           "beta_rebin_nuebar" );
+
+        MakeEfficiencyPlotByCut("h_eff_cosine_beta",             false, false, "Generated Electron cos(#beta); Efficiency",                       "True e#lower[-0.5]{-}/e^{+} Events in FV",          "cosine_beta" );
+        MakeEfficiencyPlotByCut("h_eff_cosine_beta_rebin",       true, false,  "True e#lower[-0.5]{-} + e^{+} cos(#beta); Efficiency",            "True e#lower[-0.5]{-} + e^{+} Events in FV",        "cosine_beta_rebin" );
+        MakeEfficiencyPlotByCut("h_eff_cosine_beta_rebin_nue",   true, false,  "True e#lower[-0.5]{-} cos(#beta); Efficiency",                    "True e#lower[-0.5]{-} Events in FV",                "cosine_beta_rebin_nue" );
+        MakeEfficiencyPlotByCut("h_eff_cosine_beta_rebin_nuebar",true, false,  "True e^{+} cos(#beta); Efficiency",                               "True e^{+} Events in FV",                           "cosine_beta_rebin_nuebar" );
+        
+        MakeEfficiencyPlotByCut("h_eff_proton_multi",            false, false, "True #nu_{e} + #bar{#nu}_{e} Proton Multi.; Efficiency",          "True #nu_{e} + #bar{#nu}_{e} Events in FV",        "prot_multi" );
+        MakeEfficiencyPlotByCut("h_eff_proton_multi_nue",        false, false, "True #nu_{e} Proton Multi.; Efficiency",                          "True #nu_{e} Events in FV",                        "prot_multi_nue" );
+        MakeEfficiencyPlotByCut("h_eff_proton_multi_nuebar",     false, false, "True #bar{#nu}_{e} Proton Multi.; Efficiency",                    "True #bar{#nu}_{e} Events in FV",                  "prot_multi_nuebar" );
+        
+        MakeEfficiencyPlotByCut("h_eff_pion_multi",              false, false, "True #nu_{e} + #bar{#nu}_{e} Pion Multi.; Efficiency",            "True #nu_{e} + #bar{#nu}_{e} Events in FV",        "pion_multi" );
+        MakeEfficiencyPlotByCut("h_eff_pion_multi_nue",          false, false, "True #nu_{e} Pion Multi.; Efficiency",                            "True #nu_{e} Events in FV",                        "pion_multi_nue" );
+        MakeEfficiencyPlotByCut("h_eff_pion_multi_nuebar",       false, false, "True #bar{#nu}_{e} Pion Multi.; Efficiency",                      "True #bar{#nu}_{e} Events in FV",                  "pion_multi_nuebar" );
+        
+        MakeEfficiencyPlotByCut("h_eff_charg_par_multi",         false, false, "True #nu_{e} + #bar{#nu}_{e} Charged Particle Multi; Efficiency", "True #nu_{e} + #bar{#nu}_{e} Events in FV",        "charg_par_multi" );
+        MakeEfficiencyPlotByCut("h_eff_charg_par_multi_nue",     false, false, "True #nu_{e} Charged Particle Multi.; Efficiency",                "True #nu_{e} Events in FV",                        "charg_par_multi_nue" );
+        MakeEfficiencyPlotByCut("h_eff_charg_par_multi_nuebar",  false, false, "True #bar{#nu}_{e} Charged Particle Multi.; Efficiency",          "True #bar{#nu}_{e} Events in FV",                  "charg_par_multi_nuebar" );
+
+        MakeEfficiencyPlotByCutTot("h_true_nu_E",             "h_true_nu_E_nue",             "h_true_nu_E_nuebar",             "#nu_{e} + #bar{#nu}_{e}", "#nu_{e}",          "#bar{#nu}_{e}",   true, false, "True Neutrino Energy [GeV]; Efficiency",         "nu_E");
+        MakeEfficiencyPlotByCutTot("h_true_elec_E_rebin",     "h_true_elec_E_rebin_nue",     "h_true_elec_E_rebin_nuebar",     "e#lower[-0.5]{-} + e^{+}","e#lower[-0.5]{-}", "e^{+}",           true, false, "True Electron Energy [GeV]; Efficiency",         "elec_E_rebin");
+        MakeEfficiencyPlotByCutTot("h_eff_cosine_beta_rebin", "h_eff_cosine_beta_rebin_nue", "h_eff_cosine_beta_rebin_nuebar", "e#lower[-0.5]{-} + e^{+}","e#lower[-0.5]{-}", "e^{+}",           true, false, "True cos#beta; Efficiency",         "cosine_beta_rebin");
+        MakeEfficiencyPlotByCutTot("h_eff_proton_multi",      "h_eff_proton_multi_nue",      "h_eff_proton_multi_nuebar",      "#nu_{e} + #bar{#nu}_{e}", "#nu_{e}",          "#bar{#nu}_{e}",   true, false, "True Proton Multiplicity; Efficiency",           "prot_multi");
+        MakeEfficiencyPlotByCutTot("h_eff_pion_multi",        "h_eff_pion_multi_nue",        "h_eff_pion_multi_nuebar",        "#nu_{e} + #bar{#nu}_{e}", "#nu_{e}",          "#bar{#nu}_{e}",   true, false, "True Pion Multiplicity; Efficiency",             "pion_multi");
+        MakeEfficiencyPlotByCutTot("h_eff_charg_par_multi",   "h_eff_charg_par_multi_nue",   "h_eff_charg_par_multi_nuebar",   "#nu_{e} + #bar{#nu}_{e}", "#nu_{e}",          "#bar{#nu}_{e}",   true, false, "True Charged Particle Multiplicity; Efficiency", "charg_par_multi");
 
         // Create the interaction folder
         _util.CreateDirectory("Interaction");
 
         // Interaction Plot
-        MakeInteractionPlot(Form("plots/run%s/Interaction/True_nue_nuebar_e_interaction_unselected.pdf", _util.run_period), "unselected","nue_nuebar", true);
-        MakeInteractionPlot(Form("plots/run%s/Interaction/True_nue_nuebar_e_interaction_selected.pdf", _util.run_period), "selected","nue_nuebar", true);
-        MakeInteractionPlot(Form("plots/run%s/Interaction/True_nue_e_interaction_unselected.pdf", _util.run_period), "unselected","nue", true);
-        MakeInteractionPlot(Form("plots/run%s/Interaction/True_nue_e_interaction_selected.pdf", _util.run_period), "selected","nue", true);
-        MakeInteractionPlot(Form("plots/run%s/Interaction/True_nuebar_e_interaction_unselected.pdf", _util.run_period), "unselected","nuebar", true);
-        MakeInteractionPlot(Form("plots/run%s/Interaction/True_nuebar_e_interaction_selected.pdf", _util.run_period), "selected","nuebar", true);
-        MakeInteractionEfficiency(Form("plots/run%s/Interaction/True_nue_e_interaction_efficiency.pdf", _util.run_period));
+        for (int i = 0; i < 2; i++){
+            
+            std::string cut_stage = "unselected";
+            
+            if (i == 1) 
+                cut_stage = "selected";
+
+            MakeInteractionPlot("h_true_nue_E",                 true, ";True #nu_{e} Energy [GeV]; Entries",                    "nue_E",                  cut_stage, 1100 );
+            MakeInteractionPlot("h_true_nuebar_E",              true, ";True #bar{#nu}_{e} Energy [GeV]; Entries",              "nuebar_E",               cut_stage, 170);
+            MakeInteractionPlot("h_true_nue_nuebar_E",          true, ";True #nu_{e} + #bar{#nu}_{e} Energy [GeV]; Entries",    "nue_nuebar_E",           cut_stage, 1300);
+            MakeInteractionPlot("h_int_nu_E_single_bin",        true, "True #nu_{e} + #bar{#nu}_{e};; Entries",                 "nu_E_single_bin",        cut_stage, 30000);
+            MakeInteractionPlot("h_int_nu_E_nue_single_bin",    true, "True #nu_{e};; Entries",                                 "nu_E_nue_single_bin",    cut_stage, 25000);
+            MakeInteractionPlot("h_int_nu_E_nuebar_single_bin", true, "True #bar{#nu}_{e};; Entries",                           "nu_E_nuebar_single_bin", cut_stage, 5500);
+            MakeInteractionPlot("h_int_elec_E",                 true, ";True e#lower[-0.5]{-} + e^{+} Energy [GeV]; Entries",   "elec_E",                 cut_stage, 1600);
+            MakeInteractionPlot("h_int_elec_E_nue",             true, ";True e#lower[-0.5]{-} Energy [GeV]; Entries",           "elec_E_nue",             cut_stage, 1600);
+            MakeInteractionPlot("h_int_elec_E_nuebar",          true, ";True e^{+} Energy [GeV]; Entries",                      "elec_E_nuebar",          cut_stage, 1600);
+            MakeInteractionPlot("h_int_elec_E_rebin",           true, ";True e#lower[-0.5]{-} + e^{+} Energy [GeV]; Entries",   "elec_E_rebin",           cut_stage, 3000);
+            MakeInteractionPlot("h_int_elec_E_rebin_nue",       true, ";True e#lower[-0.5]{-} Energy [GeV]; Entries",           "elec_E_rebin_nue",       cut_stage, 3000);
+            MakeInteractionPlot("h_int_elec_E_rebin_nuebar",    true, ";True e^{+} Energy [GeV]; Entries",                      "elec_E_rebin_nuebar",    cut_stage, 300);
+            MakeInteractionPlot("h_int_elec_theta",             true, ";True e#lower[-0.5]{-} + e^{+} #theta [deg]; Entries",   "elec_theta",             cut_stage, 600);
+            MakeInteractionPlot("h_int_elec_phi",               true, ";True e#lower[-0.5]{-} + e^{+} #phi [deg]; Entries",     "elec_phi",               cut_stage, 500);
+            MakeInteractionPlot("h_int_effective_ang",          true, ";True e#lower[-0.5]{-} + e^{+} Eff Ang. [deg]; Entries", "eff_ang",                cut_stage, 600);
+            MakeInteractionPlot("h_int_beta_nue",               true, ";True e#lower[-0.5]{-} #beta [deg]; Entries",            "eff_ang_nue",            cut_stage, 600);
+            MakeInteractionPlot("h_int_beta_nuebar",            true, ";True e^{+} #beta [deg]; Entries",                       "eff_ang_nuebar",         cut_stage, 600);
+            MakeInteractionPlot("h_int_cosbeta",                true, ";True e#lower[-0.5]{-} + e^{+} cos#beta; Entries",       "cosbeta_rebin",          cut_stage, 600);
+            MakeInteractionPlot("h_int_cosbeta_rebin_nue",      true, ";True e#lower[-0.5]{-} cos#beta; Entries",               "cosbeta_rebin_nue",      cut_stage, 600);
+            MakeInteractionPlot("h_int_cosbeta_rebin_nuebar",   true, ";True e^{+} cos#beta; Entries",                          "cosbeta_rebin_nuebar",   cut_stage, 600);
+        }
+        
+        MakeInteractionEfficiency("h_true_nue_E",                 false, ";True #nu_{e} Energy [GeV]; Efficiency",                    "nue_E");
+        MakeInteractionEfficiency("h_true_nuebar_E",              false, ";True #bar{#nu}_{e} Energy [GeV]; Efficiency",              "nuebar_E");
+        MakeInteractionEfficiency("h_true_nue_nuebar_E",          false, ";True #nu_{e} + #bar{#nu}_{e} Energy [GeV]; Efficiency",    "nue_nuebar_E");
+        MakeInteractionEfficiency("h_int_nu_E_single_bin",        true,  "True #nu_{e} + #bar{#nu}_{e};; Efficiency",                 "nu_E_single_bin");
+        MakeInteractionEfficiency("h_int_nu_E_nue_single_bin",    true,  "True #nu_{e};; Efficiency",                                 "nu_E_nue_single_bin");
+        MakeInteractionEfficiency("h_int_nu_E_nuebar_single_bin", true,  "True #bar{#nu}_{e};; Efficiency",                           "nu_E_nuebar_single_bin");
+        MakeInteractionEfficiency("h_int_elec_E",                 false, ";True e#lower[-0.5]{-} + e^{+} Energy [GeV]; Efficiency",   "elec_E");
+        MakeInteractionEfficiency("h_int_elec_E_rebin",           false, ";Generated Electron Energy [GeV]; Efficiency",              "elec_E_rebin");
+        MakeInteractionEfficiency("h_int_elec_E_rebin_nue",       false, ";True e#lower[-0.5]{-} Energy [GeV]; Efficiency",           "elec_E_rebin_nue");
+        MakeInteractionEfficiency("h_int_elec_E_rebin_nuebar",    false, ";True e^{+} Energy [GeV]; Efficiency",                      "elec_E_rebin_nuebar");
+        MakeInteractionEfficiency("h_int_elec_theta",             false, ";True e#lower[-0.5]{-} + e^{+} #theta [deg]; Efficiency",   "elec_theta");
+        MakeInteractionEfficiency("h_int_elec_phi",               false, ";True e#lower[-0.5]{-} + e^{+} #phi [deg]; Efficiency",     "elec_phi");
+        MakeInteractionEfficiency("h_int_effective_ang",          false, ";True e#lower[-0.5]{-} + e^{+} #beta [deg]; Efficiency",    "eff_ang");
+        MakeInteractionEfficiency("h_int_beta_nue",               false, ";True e#lower[-0.5]{-} #beta [deg]; Efficiency",            "eff_ang_nue");
+        MakeInteractionEfficiency("h_int_beta_nuebar",            false, ";True e^{+} #beta [deg]; Efficiency",                       "eff_ang_nuebar");
+        MakeInteractionEfficiency("h_int_cosbeta",                false, ";Generated Electron cos#beta; Efficiency",       "cosbeta");
 
         // Create the 2D folder
         _util.CreateDirectory("2D");
@@ -139,23 +210,40 @@ void HistogramPlotter::MakeHistograms(Utility _utility) {
             Save1DHists(Form("plots/run%s/Truth/reco_true_nu_ang_%s.pdf", _util.run_period, cut_type.c_str()),     "h_reco_true_ang", cut_type, true);
 
             // Make the 2D histograms
-            Save2DHists(Form("plots/run%s/Truth/h_true_nue_phi_theta_%s.pdf",          _util.run_period, cut_type.c_str()), "h_true_nue_phi_theta", cut_type, false);
-            Save2DHists(Form("plots/run%s/Truth/h_true_nue_energy_theta_%s.pdf",       _util.run_period, cut_type.c_str()), "h_true_nue_energy_theta", cut_type, false);
-            Save2DHists(Form("plots/run%s/Truth/h_true_nue_energy_phi_%s.pdf",         _util.run_period, cut_type.c_str()), "h_true_nue_energy_phi", cut_type, false);
-            Save2DHists(Form("plots/run%s/Truth/h_true_nue_energy_angle_%s.pdf",       _util.run_period, cut_type.c_str()), "h_true_nue_energy_angle", cut_type, false);
-            Save2DHists(Form("plots/run%s/Truth/h_true_nue_vtx_z_y_%s.pdf",            _util.run_period, cut_type.c_str()), "h_true_nue_vtx_z_y", cut_type, false);
-            Save2DHists(Form("plots/run%s/Truth/h_true_nue_vtx_z_y_sce_%s.pdf",        _util.run_period, cut_type.c_str()), "h_true_nue_vtx_z_y_sce", cut_type, false);
-            Save2DHists(Form("plots/run%s/Truth/h_true_elec_E_reco_elec_E_%s.pdf",     _util.run_period, cut_type.c_str()), "h_true_elec_E_reco_elec_E", cut_type, true);
-            Save2DHists(Form("plots/run%s/Truth/h_true_nu_E_reco_nu_E_%s.pdf",         _util.run_period, cut_type.c_str()), "h_true_nu_E_reco_nu_E", cut_type, true);
-            Save2DHists(Form("plots/run%s/Truth/h_true_elec_E_reco_elec_E_extra_bins_%s.pdf",     _util.run_period, cut_type.c_str()), "h_true_elec_E_reco_elec_E_extra_bins", cut_type, true);
-            Save2DHists(Form("plots/run%s/Truth/h_true_nu_E_reco_nu_E_extra_bins_%s.pdf",         _util.run_period, cut_type.c_str()), "h_true_nu_E_reco_nu_E_extra_bins", cut_type, true);
-            Save2DHists(Form("plots/run%s/Truth/h_true_nu_vtx_x_reco_nu_vtx_x_%s.pdf", _util.run_period, cut_type.c_str()), "h_true_nu_vtx_x_reco_nu_vtx_x", cut_type, false);
-            Save2DHists(Form("plots/run%s/Truth/h_true_nu_vtx_y_reco_nu_vtx_y_%s.pdf", _util.run_period, cut_type.c_str()), "h_true_nu_vtx_y_reco_nu_vtx_y", cut_type, false);
-            Save2DHists(Form("plots/run%s/Truth/h_true_nu_vtx_z_reco_nu_vtx_z_%s.pdf", _util.run_period, cut_type.c_str()), "h_true_nu_vtx_z_reco_nu_vtx_z", cut_type, false);
-            Save2DHists(Form("plots/run%s/Truth/h_true_shr_energy_purity_%s.pdf", _util.run_period, cut_type.c_str()), "h_true_shr_energy_purity", cut_type, false);
-            Save2DHists(Form("plots/run%s/Truth/h_true_shr_energy_completeness_%s.pdf", _util.run_period, cut_type.c_str()), "h_true_shr_energy_completeness", cut_type, false);
-            Save2DHists(Form("plots/run%s/Truth/h_true_shr_energy_resolution_reco_%s.pdf", _util.run_period, cut_type.c_str()), "h_true_shr_energy_resolution_reco", cut_type, false);
-            Save2DHists(Form("plots/run%s/Truth/h_true_shr_energy_resolution_true_%s.pdf", _util.run_period, cut_type.c_str()), "h_true_shr_energy_resolution_true", cut_type, false);
+            Save2DHists(Form("plots/run%s/Truth/h_true_nue_phi_theta_%s.pdf",                _util.run_period, cut_type.c_str()), "h_true_nue_phi_theta", cut_type, false);
+            Save2DHists(Form("plots/run%s/Truth/h_true_nue_energy_theta_%s.pdf",             _util.run_period, cut_type.c_str()), "h_true_nue_energy_theta", cut_type, false);
+            Save2DHists(Form("plots/run%s/Truth/h_true_nue_energy_phi_%s.pdf",               _util.run_period, cut_type.c_str()), "h_true_nue_energy_phi", cut_type, false);
+            Save2DHists(Form("plots/run%s/Truth/h_true_nue_energy_angle_%s.pdf",             _util.run_period, cut_type.c_str()), "h_true_nue_energy_angle", cut_type, false);
+            Save2DHists(Form("plots/run%s/Truth/h_true_nue_vtx_z_y_%s.pdf",                  _util.run_period, cut_type.c_str()), "h_true_nue_vtx_z_y", cut_type, false);
+            Save2DHists(Form("plots/run%s/Truth/h_true_nue_vtx_z_y_sce_%s.pdf",              _util.run_period, cut_type.c_str()), "h_true_nue_vtx_z_y_sce", cut_type, false);
+            Save2DHists(Form("plots/run%s/Truth/h_true_elec_E_reco_elec_E_%s.pdf",           _util.run_period, cut_type.c_str()), "h_true_elec_E_reco_elec_E", cut_type, true);
+            Save2DHists(Form("plots/run%s/Truth/h_true_nu_E_reco_nu_E_%s.pdf",               _util.run_period, cut_type.c_str()), "h_true_nu_E_reco_nu_E", cut_type, true);
+            Save2DHists(Form("plots/run%s/Truth/h_true_elec_E_reco_elec_E_extra_bins_%s.pdf",_util.run_period, cut_type.c_str()), "h_true_elec_E_reco_elec_E_extra_bins", cut_type, true);
+            Save2DHists(Form("plots/run%s/Truth/h_true_nu_E_reco_nu_E_extra_bins_%s.pdf",    _util.run_period, cut_type.c_str()), "h_true_nu_E_reco_nu_E_extra_bins", cut_type, true);
+            Save2DHists(Form("plots/run%s/Truth/h_true_nu_vtx_x_reco_nu_vtx_x_%s.pdf",       _util.run_period, cut_type.c_str()), "h_true_nu_vtx_x_reco_nu_vtx_x", cut_type, false);
+            Save2DHists(Form("plots/run%s/Truth/h_true_nu_vtx_y_reco_nu_vtx_y_%s.pdf",       _util.run_period, cut_type.c_str()), "h_true_nu_vtx_y_reco_nu_vtx_y", cut_type, false);
+            Save2DHists(Form("plots/run%s/Truth/h_true_nu_vtx_z_reco_nu_vtx_z_%s.pdf",       _util.run_period, cut_type.c_str()), "h_true_nu_vtx_z_reco_nu_vtx_z", cut_type, false);
+            Save2DHists(Form("plots/run%s/Truth/h_true_shr_energy_purity_%s.pdf",            _util.run_period, cut_type.c_str()), "h_true_shr_energy_purity", cut_type, false);
+            Save2DHists(Form("plots/run%s/Truth/h_true_shr_energy_completeness_%s.pdf",      _util.run_period, cut_type.c_str()), "h_true_shr_energy_completeness", cut_type, false);
+            Save2DHists(Form("plots/run%s/Truth/h_true_shr_energy_resolution_reco_%s.pdf",   _util.run_period, cut_type.c_str()), "h_true_shr_energy_resolution_reco", cut_type, false);
+            Save2DHists(Form("plots/run%s/Truth/h_true_shr_energy_resolution_true_%s.pdf",   _util.run_period, cut_type.c_str()), "h_true_shr_energy_resolution_true", cut_type, false);
+            Save2DHists(Form("plots/run%s/Truth/h_elec_true_beta_reco_beta_%s.pdf",          _util.run_period, cut_type.c_str()), "h_elec_true_beta_reco_beta",   cut_type, true);
+            Save2DHists(Form("plots/run%s/Truth/h_elec_true_theta_reco_theta_%s.pdf",        _util.run_period, cut_type.c_str()), "h_elec_true_theta_reco_theta", cut_type, false);
+            Save2DHists(Form("plots/run%s/Truth/h_elec_true_phi_reco_phi_%s.pdf",            _util.run_period, cut_type.c_str()), "h_elec_true_phi_reco_phi",     cut_type, false);
+
+            Save2DHists(Form("plots/run%s/Truth/h_true_shr_cosbeta_purity_%s.pdf",            _util.run_period, cut_type.c_str()), "h_true_shr_cosbeta_purity", cut_type, false);
+            Save2DHists(Form("plots/run%s/Truth/h_true_shr_cosbeta_completeness_%s.pdf",      _util.run_period, cut_type.c_str()), "h_true_shr_cosbeta_completeness", cut_type, false);
+            Save2DHists(Form("plots/run%s/Truth/h_true_shr_cosbeta_resolution_reco_%s.pdf",   _util.run_period, cut_type.c_str()), "h_true_shr_cosbeta_resolution_reco", cut_type, false);
+            Save2DHists(Form("plots/run%s/Truth/h_true_shr_cosbeta_resolution_true_%s.pdf",   _util.run_period, cut_type.c_str()), "h_true_shr_cosbeta_resolution_true", cut_type, false);
+
+            Save2DHists(Form("plots/run%s/Truth/h_true_elec_E_reco_elec_E_rebin_%s.pdf",_util.run_period, cut_type.c_str()), "h_true_elec_E_reco_elec_E_rebin", cut_type, true);
+            Save2DHists(Form("plots/run%s/Truth/h_elec_true_cosbeta_reco_cosbeta_rebin_%s.pdf",_util.run_period, cut_type.c_str()), "h_elec_true_cosbeta_reco_cosbeta_rebin", cut_type, true);
+
+            Save2DHists(Form("plots/run%s/Truth/h_true_elec_E_reco_elec_E_extra_bins_nue_%s.pdf",   _util.run_period, cut_type.c_str()), "h_true_elec_E_reco_elec_E_extra_bins_nue", cut_type, true);
+            Save2DHists(Form("plots/run%s/Truth/h_true_elec_E_reco_elec_E_extra_bins_nuebar_%s.pdf",_util.run_period, cut_type.c_str()), "h_true_elec_E_reco_elec_E_extra_bins_nuebar", cut_type, true);
+
+            Save2DHists(Form("plots/run%s/Truth/h_elec_true_beta_reco_beta_nue_%s.pdf",    _util.run_period, cut_type.c_str()), "h_elec_true_beta_reco_beta_nue",   cut_type, true);
+            Save2DHists(Form("plots/run%s/Truth/h_elec_true_beta_reco_beta_nuebar_%s.pdf", _util.run_period, cut_type.c_str()), "h_elec_true_beta_reco_beta_nuebar",   cut_type, true);
 
             // Normalised by reco (row)
             Save2DHistsNorm(Form("plots/run%s/Truth/h_true_elec_E_reco_elec_E_%s_row_norm_reco.pdf",     _util.run_period, cut_type.c_str()), "h_true_elec_E_reco_elec_E", cut_type, true, "reco");
@@ -163,40 +251,6 @@ void HistogramPlotter::MakeHistograms(Utility _utility) {
             // Normalised by true (col)
             Save2DHistsNorm(Form("plots/run%s/Truth/h_true_elec_E_reco_elec_E_%s_col_norm_true.pdf",     _util.run_period, cut_type.c_str()), "h_true_elec_E_reco_elec_E", cut_type, true, "true");
         }
-
-        // Stacked histograms for pi0
-        // Create the Truth folder
-        _util.CreateDirectory("pi0");
-
-        // pi0 mass peak unweighted
-        MakeStack("h_pi0_mass", " ",
-                area_norm, false, 1.6, "Mass [MeV]",  0.35, 0.85, 0.55, 0.85, Data_POT,
-                Form("plots/run%s/pi0/pi0_mass.pdf", _util.run_period), false, "classifications_pi0", false, false, true);
-
-        // pi0 mass normlaisation fixed
-        MakeStack("h_pi0_mass_norm", " ",
-                area_norm, false, 1.6, "Mass [MeV] (Normalisation Fixed)",  0.35, 0.85, 0.55, 0.85, Data_POT,
-                Form("plots/run%s/pi0/pi0_mass_norm.pdf", _util.run_period), false, "classifications_pi0", false, false, true);
-
-        // pi0 mass peak unweighted
-        MakeStack("h_pi0_mass_EScale", " ",
-                area_norm, false, 1.6, "Mass [MeV] (E Dependent Scaling)",  0.35, 0.85, 0.55, 0.85, Data_POT,
-                Form("plots/run%s/pi0/pi0_mass_EScale.pdf", _util.run_period), false, "classifications_pi0", false, false, true);
-
-        // pi0 energy unweighted
-        MakeStack("h_pi0_energy", " ",
-                area_norm, false, 1.5, "#pi^{0} Energy [MeV]",  0.35, 0.85, 0.55, 0.85, Data_POT,
-                Form("plots/run%s/pi0/pi0_energy.pdf", _util.run_period), false, "classifications_pi0", false, false, true);
-
-        // pi0 energy normlaisation fixed
-        MakeStack("h_pi0_energy_norm", " ",
-                area_norm, false, 1.5, "#pi^{0} Energy [MeV] (Normalisation Fixed)",  0.35, 0.85, 0.55, 0.85, Data_POT,
-                Form("plots/run%s/pi0/pi0_energy_norm.pdf", _util.run_period), false, "classifications_pi0", false, false, true);
-
-        // pi0 energy unweighted
-        MakeStack("h_pi0_energy_EScale", " ",
-                area_norm, false, 1.5, "#pi^{0} Energy [MeV] (E Dependent Scaling)",  0.35, 0.85, 0.55, 0.85, Data_POT,
-                Form("plots/run%s/pi0/pi0_energy_EScale.pdf", _util.run_period), false, "classifications_pi0", false, false, true);
 
         // Stacked histograms for numu
         // Create the Truth folder
@@ -224,14 +278,55 @@ void HistogramPlotter::MakeHistograms(Utility _utility) {
 
     }
 
+    if (!_util.isfakedata){
+
+        // Stacked histograms for pi0
+        // Create the Truth folder
+        _util.CreateDirectory("pi0");
+
+        // pi0 mass peak unweighted
+        MakeStack("h_pi0_mass", " ",
+                area_norm, false, 1.6, "Mass [MeV]",  0.35, 0.85, 0.55, 0.85, Data_POT,
+                Form("plots/run%s/pi0/pi0_mass.pdf", _util.run_period), false, "classifications_pi0", true, false, true);
+
+
+        // pi0 mass normlaisation fixed
+        MakeStack("h_pi0_mass_norm", " ",
+                area_norm, false, 1.6, "Mass [MeV] (Normalisation Fixed)",  0.35, 0.85, 0.55, 0.85, Data_POT,
+                Form("plots/run%s/pi0/pi0_mass_norm.pdf", _util.run_period), false, "classifications_pi0", true, false, true);
+
+        // pi0 mass peak unweighted
+        MakeStack("h_pi0_mass_EScale", " ",
+                area_norm, false, 1.6, "Mass [MeV] (E Dependent Scaling)",  0.35, 0.85, 0.55, 0.85, Data_POT,
+                Form("plots/run%s/pi0/pi0_mass_EScale.pdf", _util.run_period), false, "classifications_pi0", true, false, true);
+
+        // pi0 energy unweighted
+        MakeStack("h_pi0_energy", " ",
+                area_norm, false, 1.5, "#pi^{0} Energy [MeV]",  0.35, 0.85, 0.55, 0.85, Data_POT,
+                Form("plots/run%s/pi0/pi0_energy.pdf", _util.run_period), false, "classifications_pi0", true, false, true);
+
+        // pi0 energy normlaisation fixed
+        MakeStack("h_pi0_energy_norm", " ",
+                area_norm, false, 1.5, "#pi^{0} Energy [MeV] (Normalisation Fixed)",  0.35, 0.85, 0.55, 0.85, Data_POT,
+                Form("plots/run%s/pi0/pi0_energy_norm.pdf", _util.run_period), false, "classifications_pi0", false, false, true);
+
+        // pi0 energy unweighted
+        MakeStack("h_pi0_energy_EScale", " ",
+                area_norm, false, 1.5, "#pi^{0} Energy [MeV] (E Dependent Scaling)",  0.35, 0.85, 0.55, 0.85, Data_POT,
+                Form("plots/run%s/pi0/pi0_energy_EScale.pdf", _util.run_period), false, "classifications_pi0", false, false, true);
+        
+    }
+
     // Loop over the cuts and plot histograms by plot type
     for (unsigned int i = 0; i < _util.k_cuts_MAX; i++) {
 
         // Create the directories
-        if (std::string(_util.variation) == "empty")
-            _util.CreateDirectory("/cuts/" + _util.cut_dirs.at(i));
-        else
+        if (_util.isvariation)
             _util.CreateDirectory("/detvar/" + std::string(_util.variation) + "/cuts/" + _util.cut_dirs.at(i));
+        else if (_util.isfakedata)
+            _util.CreateDirectory("/detvar/fake_" + std::string(_util.fakedataname) + "/cuts/" + _util.cut_dirs.at(i));
+        else
+            _util.CreateDirectory("/cuts/" + _util.cut_dirs.at(i));
 
         // Call the Make stack function for all the plots we want
         CallMakeStack( i, Data_POT);
@@ -356,7 +451,10 @@ void HistogramPlotter::Draw_VarMode(TCanvas *c ) {
     TPaveText *pt;
 
     pt = new TPaveText(0.3215, 0.936, 0.3215, 0.936, "NDC");
-    pt->AddText(_util.variation);
+    if (_util.isfakedata)
+        pt->AddText(Form("fake_%s", _util.fakedataname));
+    else 
+        pt->AddText(_util.variation);
     pt->SetBorderSize(0);
     pt->SetFillColor(0);
     pt->SetFillStyle(0);
@@ -364,6 +462,9 @@ void HistogramPlotter::Draw_VarMode(TCanvas *c ) {
     pt->SetTextColor(kViolet + 2);
     
     if (std::string(_util.variation) != "empty")
+        pt->Draw();
+
+    if (_util.isfakedata)
         pt->Draw();
 }
 // -----------------------------------------------------------------------------
@@ -595,6 +696,8 @@ void HistogramPlotter::SetFillColours(std::vector<TH1D *> &hist, std::string plo
         hist.at(_util.k_nu_out_fv)->SetFillColor(kViolet - 7);
         hist.at(_util.k_numu_cc_pi0)->SetFillColor(42);
         hist.at(_util.k_unmatched)->SetFillColor(12);
+        hist.at(_util.k_thr_nue)->SetFillColor(kOrange-3);
+        hist.at(_util.k_thr_nuebar)->SetFillColor(kOrange-3);
     }
     // By particle type
     else {
@@ -639,6 +742,7 @@ void HistogramPlotter::SetLegend(std::vector<TH1D *> hist, TLegend *leg_stack, s
         leg_stack->AddEntry(hist.at(_util.k_numu_cc),     Form("#nu_{#mu} CC (%2.1f)", hist_integrals.at(_util.k_numu_cc)), "f");
         leg_stack->AddEntry(hist.at(_util.k_cosmic),      Form("Cosmic (%2.1f)", hist_integrals.at(_util.k_cosmic) + hist_integrals.at(_util.k_cosmic_nue) + hist_integrals.at(_util.k_cosmic_nuebar)), "f");
         leg_stack->AddEntry(hist.at(_util.k_nu_out_fv),   Form("#nu OutFV (%2.1f)", hist_integrals.at(_util.k_nu_out_fv)), "f");
+        // leg_stack->AddEntry(hist.at(_util.k_thr_nue),     Form("Below Th. #nu_{e} CC (%2.1f)", hist_integrals.at(_util.k_thr_nue) + hist_integrals.at(_util.k_thr_nuebar)), "f");
         leg_stack->AddEntry(hist.at(_util.k_nuebar_cc),   Form("#bar{#nu}_{e} CC (%2.1f)", hist_integrals.at(_util.k_nuebar_cc)), "f");
         leg_stack->AddEntry(hist.at(_util.k_nue_cc),      Form("#nu_{e} CC (%2.1f)", hist_integrals.at(_util.k_nue_cc)), "f");
     }
@@ -692,9 +796,6 @@ void HistogramPlotter::MakeStack(std::string hist_name, std::string cut_name, bo
 
     double integral_mc_ext{0.0}; // Integral of MC + EXT -- needs to be removed
     double y_maximum{0};         // y max for scaling histogram scale
-
-    std::vector<double> chi2;
-    TPaveText *pt_bottom;
 
     TH1D *h_ratio;
     TH1D *h_ratio_error;
@@ -785,6 +886,13 @@ void HistogramPlotter::MakeStack(std::string hist_name, std::string cut_name, bo
             integral_mc_ext += hist.at(i)->Integral();
             // std::cout <<  hist.at(i)->Integral()<< std::endl;
         }
+
+        // Normalse the histograms with uneaven bin widths
+        if (hist_name == "h_reco_shower_energy_cali_rebin" || hist_name == "h_reco_effective_angle_rebin" || hist_name == "h_reco_effective_cosangle_rebin"){
+            hist.at(i)->Scale(1, "width");
+            // h_stack->GetYaxis()->SetTitle("Entries / GeV");
+        }
+
     }
 
     // Set fill colours of stacked histogram
@@ -857,8 +965,13 @@ void HistogramPlotter::MakeStack(std::string hist_name, std::string cut_name, bo
     }
 
     // Set the y axis of the stack
-    if (!_area_norm)
+    if (!_area_norm){
         h_stack->GetYaxis()->SetTitle("Entries");
+    
+        if (hist_name == "h_reco_shower_energy_cali_rebin"){
+            h_stack->GetYaxis()->SetTitle("Entries / GeV");
+        }
+    }
     else
         h_stack->GetYaxis()->SetTitle("Entries [A.U.]");
 
@@ -973,7 +1086,7 @@ void HistogramPlotter::MakeStack(std::string hist_name, std::string cut_name, bo
         AddSysUncertainty(h_error_hist, hist.at(k_plot_ext), hist.at(k_plot_dirt), hist_name, cut_name, "POT",  "Stack");
         AddSysUncertainty(h_error_hist, hist.at(k_plot_ext), hist.at(k_plot_dirt), hist_name, cut_name, "Dirt", "Dirt");
     }
-
+        
     // Plotting error ---------------------------------------------------------
 
     h_error_hist->SetFillColorAlpha(12, 0.15);
@@ -1008,11 +1121,6 @@ void HistogramPlotter::MakeStack(std::string hist_name, std::string cut_name, bo
     else if (logy && found_data)
         topPad->SetLogy();
 
-    // Calculate the chi2
-    if (found_data) {
-        TH1D *h_last = (TH1D *)h_stack->GetStack()->Last();
-        chi2 = Chi2Calc(h_last, hist.at(k_plot_data), _area_norm, hist_integrals.at(k_plot_data));
-    }
 
     // Now create the ratio of data to MC ----------------------------------
     if (found_data) {
@@ -1057,10 +1165,10 @@ void HistogramPlotter::MakeStack(std::string hist_name, std::string cut_name, bo
         // h_ratio->GetYaxis()->SetRangeUser(-0.5,0.5);
         // h_ratio->GetYaxis()->SetRangeUser(-0.2, 0.2);
 
-        // For ratio
-        if (cut_name == "Unselected" || cut_name == "SoftwareTrig"  || cut_name == "Slice_ID")
-            h_ratio->GetYaxis()->SetRangeUser(0.8, 1.2);
-        else
+        // // For ratio
+        // if (cut_name == "Unselected" || cut_name == "SoftwareTrig"  || cut_name == "Slice_ID")
+        //     h_ratio->GetYaxis()->SetRangeUser(0.8, 1.2);
+        // else
             h_ratio->GetYaxis()->SetRangeUser(0, 2.0);
 
         h_ratio->GetYaxis()->SetTitle("#frac{Beam-On}{(MC + Beam-Off)}");
@@ -1085,29 +1193,10 @@ void HistogramPlotter::MakeStack(std::string hist_name, std::string cut_name, bo
             h_ratio->GetXaxis()->CenterLabels(kTRUE);
         }
 
-        // Now doing this stuff on the bottom pad
-        //x_min, y_min, x_max, y_max
-        // Reduced chi2
-        pt_bottom = new TPaveText(.12, .80, .30, .96, "NBNDC");
-        std::ostringstream o_string_bottom;
-        o_string_bottom.precision(3);
-        o_string_bottom << std::fixed;
-        o_string_bottom << float(chi2.at(0) * chi2.at(3));
-        std::string convert_string_bottom = o_string_bottom.str();
-
-        std::ostringstream o_string3_bottom;
-        o_string3_bottom << int(chi2.at(3));
-        std::string convert_string3_bottom = o_string3_bottom.str();
-
-        std::string chi2_string_bottom = "#chi_{Stat}^{2}/DOF=(" + convert_string_bottom + "/" + convert_string3_bottom + ")";
-        pt_bottom->AddText(chi2_string_bottom.c_str());
-        pt_bottom->SetFillStyle(0);
-        pt_bottom->SetBorderSize(0);
-        // pt_bottom->Draw();
     }
 
     // Draw the run period on the plot
-    _util.Draw_Run_Period(c, 0.86, 0.915, 0.86, 0.915);
+    // _util.Draw_Run_Period(c, 0.86, 0.915, 0.86, 0.915);
 
     // Draw variation mode if in that mode
     Draw_VarMode(c);
@@ -1130,17 +1219,34 @@ void HistogramPlotter::MakeStack(std::string hist_name, std::string cut_name, bo
     // std::cout << print_name<< std::endl;
 
     if (plotmode == "classifications_pi0" || plotmode == "classifications_numu"){
-        c->Print(print_name);
+        if (_util.isvariation)
+            c->Print(Form("plots/run%s/detvar/%s/%s.pdf", _util.run_period, _util.variation, hist_name.c_str()));
+        else
+            c->Print(print_name);
         delete c;
         return;
     }
 
-    if (std::string(_util.variation) == "empty")
-        c->Print(Form("plots/run%s/%s", _util.run_period, print_name_str.c_str()));
-    else
+    if (_util.isvariation)
         c->Print(Form("plots/run%s/detvar/%s/%s", _util.run_period, _util.variation, print_name_str.c_str()));
+    else if (_util.isfakedata)
+        c->Print(Form("plots/run%s/detvar/fake_%s/%s", _util.run_period, _util.fakedataname, print_name_str.c_str()));
+    else
+        c->Print(Form("plots/run%s/%s", _util.run_period, print_name_str.c_str()));
+        
 
     delete c;
+
+
+    // Make the relavent purity plots
+    if ((hist_name == "h_reco_shower_energy_cali_rebin" || hist_name == "h_reco_effective_cosangle_rebin") && cut_name == _util.cut_dirs.at(_util.k_cuts_MAX-1))
+        MakePurityPlot(h_stack, hist.at(_util.k_nue_cc), hist.at(_util.k_nuebar_cc), hist_name);
+
+    // clear up some memory
+    for (unsigned int h = 0 ; h < hist.size(); h++){
+        delete hist.at(h);
+    }
+    
 }
 // -----------------------------------------------------------------------------
 void HistogramPlotter::CallMakeStack(int cut_index, double Data_POT) {
@@ -1197,15 +1303,21 @@ void HistogramPlotter::CallMakeStack(int cut_index, double Data_POT) {
 
     // Leading shower multiplicity
     MakeStack("h_reco_shower_multiplicity", _util.cut_dirs.at(cut_index).c_str(),
-              area_norm, false, 1.5, "Shower Multiplicty",  0.35, 0.85, 0.55, 0.85, Data_POT,
+              area_norm, false, 2.0, "Shower Multiplicty",  0.35, 0.85, 0.55, 0.85, Data_POT,
               Form("cuts/%s/reco_shower_multiplicity.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", true, true, true);
     MakeStack("h_reco_shower_multiplicity", _util.cut_dirs.at(cut_index).c_str(),
               area_norm, true, 80, "Shower Multiplicty",  0.35, 0.85, 0.55, 0.85, Data_POT,
-              Form("cuts/%s/reco_shower_multiplicity_logy.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", true, true, false);
+              Form("cuts/%s/reco_shower_multiplicity_logy.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", true, true, true);
+
+    // Leading track multiplicity
+    MakeStack("h_reco_n_track_contained", _util.cut_dirs.at(cut_index).c_str(),
+              area_norm, false, 1.5, "Num Track Contained",  0.35, 0.85, 0.55, 0.85, Data_POT,
+              Form("cuts/%s/reco_n_track_contained.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", true, true, true);
+
 
     // Leading track multiplicity
     MakeStack("h_reco_track_multiplicity", _util.cut_dirs.at(cut_index).c_str(),
-              area_norm, false, 1.5, "Track Multiplicty",  0.35, 0.85, 0.55, 0.85, Data_POT,
+              area_norm, false, 2.0, "Track Multiplicty",  0.35, 0.85, 0.55, 0.85, Data_POT,
               Form("cuts/%s/reco_track_multiplicity.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", true, true, true);
 
     // Topological Score
@@ -1214,7 +1326,7 @@ void HistogramPlotter::CallMakeStack(int cut_index, double Data_POT) {
               Form("cuts/%s/reco_topological_score.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", true, false, true);
     MakeStack("h_reco_topological_score", _util.cut_dirs.at(cut_index).c_str(),
               area_norm, true, 50, "Topological Score",  0.3, 0.8, 0.55, 0.85, Data_POT,
-              Form("cuts/%s/reco_topological_score_logy.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", true, false, false);
+              Form("cuts/%s/reco_topological_score_logy.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", true, false, true);
 
     // Track shower dist
     MakeStack("h_reco_track_shower_dist", _util.cut_dirs.at(cut_index).c_str(),
@@ -1252,26 +1364,17 @@ void HistogramPlotter::CallMakeStack(int cut_index, double Data_POT) {
               Form("cuts/%s/reco_shower_score.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, true);
     MakeStack("h_reco_shower_score", _util.cut_dirs.at(cut_index).c_str(),
               area_norm, true, 1.0, "Shower Score",  0.35, 0.85, 0.55, 0.85, Data_POT,
-              Form("cuts/%s/reco_shower_score_logy.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, false);
+              Form("cuts/%s/reco_shower_score_logy.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, true);
 
     // Track score
     MakeStack("h_reco_track_score", _util.cut_dirs.at(cut_index).c_str(),
               area_norm, false, 1.0, "Track Score",  0.35, 0.85, 0.55, 0.85, Data_POT,
               Form("cuts/%s/reco_track_score.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, true);
 
-    // Calibrated energy of all the showers
-    MakeStack("h_reco_shower_energy_tot_cali", _util.cut_dirs.at(cut_index).c_str(),
-              area_norm, false, 1.0, "Total Calibrated Energy of all Showers [GeV]",  0.35, 0.85, 0.55, 0.85, Data_POT,
-              Form("cuts/%s/reco_shower_energy_tot_cali.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, true);
-    
-    // Calibrated energy of all the showers with uneaven bins
-    MakeStack("h_reco_shower_energy_tot_cali_rebin", _util.cut_dirs.at(cut_index).c_str(),
-              area_norm, false, 1.0, "Total Calibrated Energy of all Showers [GeV]",  0.35, 0.85, 0.55, 0.85, Data_POT,
-              Form("cuts/%s/reco_shower_energy_tot_cali_rebin.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, true);
 
     // Calibrated energy of the leading shower
     MakeStack("h_reco_shower_energy_cali", _util.cut_dirs.at(cut_index).c_str(),
-              area_norm, false, 1.0, "Reco Energy Leading Shower [GeV]",  0.35, 0.85, 0.55, 0.85, Data_POT,
+              area_norm, false, 1.5, "Reco Energy Leading Shower [GeV]",  0.35, 0.85, 0.55, 0.85, Data_POT,
               Form("cuts/%s/reco_shower_energy_cali.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, true);
     
     // Calibrated energy of all the showers with uneaven bins
@@ -1296,7 +1399,7 @@ void HistogramPlotter::CallMakeStack(int cut_index, double Data_POT) {
               Form("cuts/%s/reco_opfilter_beam.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, true);
     MakeStack("h_reco_opfilter_beam", _util.cut_dirs.at(cut_index).c_str(),
               area_norm, true, 1.0, "Common Optical Filter PE [PE]",  0.35, 0.85, 0.55, 0.85, Data_POT,
-              Form("cuts/%s/reco_opfilter_beam_logy.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, false);
+              Form("cuts/%s/reco_opfilter_beam_logy.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, true);
 
     // Optical Filter Veto
     MakeStack("h_reco_opfilter_veto", _util.cut_dirs.at(cut_index).c_str(),
@@ -1304,7 +1407,7 @@ void HistogramPlotter::CallMakeStack(int cut_index, double Data_POT) {
               Form("cuts/%s/reco_opfilter_veto.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, true);
     MakeStack("h_reco_opfilter_veto", _util.cut_dirs.at(cut_index).c_str(),
               area_norm, true, 1.0, "Common Optical Filter Michel Veto [PE]",  0.35, 0.85, 0.55, 0.85, Data_POT,
-              Form("cuts/%s/reco_opfilter_veto_logy.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, false);
+              Form("cuts/%s/reco_opfilter_veto_logy.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, true);
 
     // Software trigger
     MakeStack("h_reco_softwaretrig", _util.cut_dirs.at(cut_index).c_str(),
@@ -1313,15 +1416,15 @@ void HistogramPlotter::CallMakeStack(int cut_index, double Data_POT) {
     // Software trigger
     MakeStack("h_reco_softwaretrig", _util.cut_dirs.at(cut_index).c_str(),
               area_norm, true, 1.0, "Software Trigger",  0.35, 0.85, 0.55, 0.85, Data_POT,
-              Form("cuts/%s/reco_softwaretrig_logy.pdf", _util.cut_dirs.at(cut_index).c_str()), true, "classifications", false, true, false);
+              Form("cuts/%s/reco_softwaretrig_logy.pdf", _util.cut_dirs.at(cut_index).c_str()), true, "classifications", false, true, true);
 
     // Slice ID
     MakeStack("h_reco_nslice", _util.cut_dirs.at(cut_index).c_str(),
               area_norm, false, 1.6, "Pandora Slice ID",  0.35, 0.85, 0.55, 0.85, Data_POT,
-              Form("cuts/%s/reco_nslice.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, true);
+              Form("cuts/%s/reco_nslice.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", true, false, true);
     MakeStack("h_reco_nslice", _util.cut_dirs.at(cut_index).c_str(),
               area_norm, true, 10000, "Pandora Slice ID",  0.35, 0.85, 0.55, 0.85, Data_POT,
-              Form("cuts/%s/reco_nslice_logy.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, false);
+              Form("cuts/%s/reco_nslice_logy.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, true);
 
     // Slice Cluster Fraction
     MakeStack("h_reco_slclustfrac", _util.cut_dirs.at(cut_index).c_str(),
@@ -1340,37 +1443,37 @@ void HistogramPlotter::CallMakeStack(int cut_index, double Data_POT) {
 
     // Shower dEdx with the track fitter u plane
     MakeStack("h_reco_shr_tkfit_dedx_u", _util.cut_dirs.at(cut_index).c_str(),
-              area_norm, false, 1.0, "U Plane dEdx (track fitter) [MeV/cm]",  0.35, 0.85, 0.55, 0.85, Data_POT,
+              area_norm, false, 1.0, "U Plane dE/dx (track fitter) [MeV/cm]",  0.35, 0.85, 0.55, 0.85, Data_POT,
               Form("cuts/%s/reco_shr_tkfit_dedx_u.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, true);
 
     // Shower dEdx with the track fitter v plane
     MakeStack("h_reco_shr_tkfit_dedx_v", _util.cut_dirs.at(cut_index).c_str(),
-              area_norm, false, 1.0, "V Plane dEdx (track fitter) [MeV/cm]",  0.35, 0.85, 0.55, 0.85, Data_POT,
+              area_norm, false, 1.0, "V Plane dE/dx (track fitter) [MeV/cm]",  0.35, 0.85, 0.55, 0.85, Data_POT,
               Form("cuts/%s/reco_shr_tkfit_dedx_v.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, true);
 
     // Shower dEdx with the track fitter y plane
     MakeStack("h_reco_shr_tkfit_dedx_y", _util.cut_dirs.at(cut_index).c_str(),
-              area_norm, false, 1.0, "Leading Shower dEdx (Collection Plane) [MeV/cm]",  0.35, 0.85, 0.55, 0.85, Data_POT,
+              area_norm, false, 1.0, "Leading Shower dE/dx (Collection Plane) [MeV/cm]",  0.35, 0.85, 0.55, 0.85, Data_POT,
               Form("cuts/%s/reco_shr_tkfit_dedx_y.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", true, false, true);
 
     // Shower dEdx with the track fitter plane with the most hits
     MakeStack("h_reco_shr_tkfit_dedx_max", _util.cut_dirs.at(cut_index).c_str(),
-              area_norm, false, 1.1, "Leading Shower dEdx (All Planes) [MeV/cm]",  0.35, 0.85, 0.55, 0.85, Data_POT,
+              area_norm, false, 1.1, "Leading Shower dE/dx (All Planes) [MeV/cm]",  0.35, 0.85, 0.55, 0.85, Data_POT,
               Form("cuts/%s/reco_shr_tkfit_dedx_max.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", true, false, true);
 
     // Shower dEdx with the track fitter plane with the most hits for events with tracks only
     MakeStack("h_reco_shr_tkfit_dedx_max_with_tracks", _util.cut_dirs.at(cut_index).c_str(),
-              area_norm, false, 1.1, "Leading Shower dEdx (All Planes) (with tracks) [MeV/cm]",  0.35, 0.85, 0.55, 0.85, Data_POT,
+              area_norm, false, 1.1, "Leading Shower dE/dx (All Planes) (with tracks) [MeV/cm]",  0.35, 0.85, 0.55, 0.85, Data_POT,
               Form("cuts/%s/reco_shr_tkfit_dedx_max_with_tracks.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", true, false, true);
 
     // Shower dEdx with the track fitter y plane when there is no tracks
     MakeStack("h_reco_shr_tkfit_dedx_y_no_tracks", _util.cut_dirs.at(cut_index).c_str(),
-              area_norm, false, 1.1, "Leading Shower dEdx (Collection Plane) (0 tracks) [MeV/cm]",  0.35, 0.85, 0.55, 0.85, Data_POT,
+              area_norm, false, 1.1, "Leading Shower dE/dx (Collection Plane) (0 tracks) [MeV/cm]",  0.35, 0.85, 0.55, 0.85, Data_POT,
               Form("cuts/%s/reco_shr_tkfit_dedx_y_no_tracks.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", true, false, true);
 
     // Shower dEdx with the track fitter plane with most hits when there is no tracks
     MakeStack("h_reco_shr_tkfit_dedx_max_no_tracks", _util.cut_dirs.at(cut_index).c_str(),
-              area_norm, false, 1.5, "Leading Shower dEdx (All Planes) (0 tracks) [MeV/cm]",  0.35, 0.85, 0.55, 0.85, Data_POT,
+              area_norm, false, 1.5, "Leading Shower dE/dx (All Planes) (0 tracks) [MeV/cm]",  0.35, 0.85, 0.55, 0.85, Data_POT,
               Form("cuts/%s/reco_shr_tkfit_dedx_max_no_tracks.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", true, false, true);
 
     // Shower Flash Time
@@ -1419,7 +1522,7 @@ void HistogramPlotter::CallMakeStack(int cut_index, double Data_POT) {
               Form("cuts/%s/reco_contained_fraction.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, true);
     MakeStack("h_reco_contained_fraction", _util.cut_dirs.at(cut_index).c_str(),
               area_norm, true, 10, "Contained Fraction (PFP hits in FV / hits in slice)",  0.35, 0.85, 0.55, 0.85, Data_POT,
-              Form("cuts/%s/reco_contained_fraction_logy.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, false);
+              Form("cuts/%s/reco_contained_fraction_logy.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, true);
 
     // Run number
     MakeStack("h_reco_run_number", _util.cut_dirs.at(cut_index).c_str(),
@@ -1432,7 +1535,7 @@ void HistogramPlotter::CallMakeStack(int cut_index, double Data_POT) {
               Form("cuts/%s/reco_nu_purity_from_pfp.pdf", _util.cut_dirs.at(cut_index).c_str()), true, "classifications", false, false, true);
     MakeStack("h_reco_nu_purity_from_pfp", _util.cut_dirs.at(cut_index).c_str(),
               area_norm, true, 1.0, "Neutrino Purity",  0.35, 0.85, 0.55, 0.85, Data_POT,
-              Form("cuts/%s/reco_nu_purity_from_pfp_logy.pdf", _util.cut_dirs.at(cut_index).c_str()), true, "classifications", false, false, false);
+              Form("cuts/%s/reco_nu_purity_from_pfp_logy.pdf", _util.cut_dirs.at(cut_index).c_str()), true, "classifications", false, false, true);
 
     // CRT Veto
     MakeStack("h_reco_crtveto", _util.cut_dirs.at(cut_index).c_str(),
@@ -1445,20 +1548,39 @@ void HistogramPlotter::CallMakeStack(int cut_index, double Data_POT) {
               Form("cuts/%s/reco_crthitpe.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, true);
     MakeStack("h_reco_crthitpe", _util.cut_dirs.at(cut_index).c_str(),
               area_norm, true, 1.0, "CRT Hit Intensity [PE]",  0.35, 0.85, 0.55, 0.85, Data_POT,
-              Form("cuts/%s/reco_crthitpe_logy.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, false);
+              Form("cuts/%s/reco_crthitpe_logy.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, true);
 
 
     // Angle between vector from NuMI targ to shower direction
     MakeStack("h_reco_effective_angle", _util.cut_dirs.at(cut_index).c_str(),
-              area_norm, false, 1.0, "Effective Angle [deg]",  0.35, 0.85, 0.55, 0.85, Data_POT,
+              area_norm, false, 1.5, "#beta [deg]",  0.35, 0.85, 0.55, 0.85, Data_POT,
               Form("cuts/%s/reco_effective_angle.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, true);
+
+    // Angle between vector from NuMI targ to shower direction
+    MakeStack("h_reco_effective_angle_rebin", _util.cut_dirs.at(cut_index).c_str(),
+              area_norm, false, 1.5, "#beta [deg]",  0.35, 0.85, 0.55, 0.85, Data_POT,
+              Form("cuts/%s/reco_effective_angle_rebin.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", true, false, true);
 
     // Cosine of the Angle between vector from NuMI targ to shower direction
     MakeStack("h_reco_effective_cosangle", _util.cut_dirs.at(cut_index).c_str(),
-              area_norm, false, 1.0, "Cosine Effective Angle",  0.35, 0.85, 0.55, 0.85, Data_POT,
+              area_norm, false, 1.5, "cos(#beta)",  0.35, 0.85, 0.55, 0.85, Data_POT,
               Form("cuts/%s/reco_effective_cosangle.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, true);
 
-    
+
+    // Cosine of the Angle between vector from NuMI targ to shower direction
+    MakeStack("h_reco_effective_cosangle_rebin", _util.cut_dirs.at(cut_index).c_str(),
+              area_norm, false, 1.5, "cos(#beta)",  0.35, 0.85, 0.55, 0.85, Data_POT,
+              Form("cuts/%s/reco_effective_cosangle_rebin.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", true, false, true);
+
+    // Track LLR PID score
+    MakeStack("h_reco_trk_pid_score", _util.cut_dirs.at(cut_index).c_str(),
+              area_norm, false, 1.0, "Track LLR PID Score",  0.35, 0.85, 0.55, 0.85, Data_POT,
+              Form("cuts/%s/reco_trk_pid_score.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, true);
+
+    // Pi0 Mass peak plot
+    // MakeStack("h_reco_pi0mass", _util.cut_dirs.at(cut_index).c_str(),
+    //           area_norm, false, 1.0, "#pi^{0} Mass [MeV]",  0.35, 0.85, 0.55, 0.85, Data_POT,
+    //           Form("cuts/%s/reco_pi0mass.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "classifications", false, false, true);
 
     // Stacked Histograms by particle type
 
@@ -1471,6 +1593,11 @@ void HistogramPlotter::CallMakeStack(int cut_index, double Data_POT) {
     MakeStack("h_reco_shr_tkfit_dedx_max_par", _util.cut_dirs.at(cut_index).c_str(),
               area_norm, false, 1.0, "Leading Shower dEdx (All Planes) [MeV/cm]",  0.35, 0.85, 0.55, 0.85, Data_POT,
               Form("cuts/%s/reco_shr_tkfit_dedx_max_par.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "particle", true, false, true);
+
+    // Track LLR PID score
+    // MakeStack("h_reco_trk_pid_score_par", _util.cut_dirs.at(cut_index).c_str(),
+    //           area_norm, false, 1.0, "Track LLR PID Score",  0.35, 0.85, 0.55, 0.85, Data_POT,
+    //           Form("cuts/%s/reco_trk_pid_score_par.pdf", _util.cut_dirs.at(cut_index).c_str()), false, "particle", false, false, true);
 
 
 }
@@ -1911,7 +2038,9 @@ void HistogramPlotter::MakeEfficiencyPlot(const char *print_name) {
     h_pur->GetXaxis()->SetTickLength(0.00);
 
     // Draw the run period on the plot
-    _util.Draw_Run_Period(c, 0.86, 0.92, 0.86, 0.92);
+    // _util.Draw_Run_Period(c, 0.86, 0.92, 0.86, 0.92);
+
+    _util.Draw_ubooneSim(c, 0.33, 0.925, 0.33, 0.905);
 
     c->Print(print_name);
 
@@ -1920,9 +2049,9 @@ void HistogramPlotter::MakeEfficiencyPlot(const char *print_name) {
 // -----------------------------------------------------------------------------
 void HistogramPlotter::MakeEfficiencyPlotByCut(std::string var, bool mask_title, bool mask_ax_label, const char* pri_ax_name, const char* sec_ax_name, const char* printname) {
 
-    std::vector<TH1D *> hist(_util.k_cuts_MAX); // The vector of histograms from the file for the plot
-    std::vector<TEfficiency *> TEff_v(_util.k_cuts_MAX);
-
+    std::vector<TH1D *> hist(_util.k_cuts_MAX);          // The vector of histograms from the file for the plot
+    std::vector<TH1D *> hist_eff(_util.k_cuts_MAX);      // Vector to store the efficiencies by cut so we can draw them sequentially on one plot
+    std::string rebin_str = "rebin";                     // use this as a string to search the printname for uneaven bin sizes so we can nornalise by bin width
     TH1D *h_clone;
 
     // Helps determine what axes labels to draw 
@@ -1951,8 +2080,8 @@ void HistogramPlotter::MakeEfficiencyPlotByCut(std::string var, bool mask_title,
         
         // Get the bin errors based on binomial dist = sqrt(e/N*(1-e))) where e = n/N is the efficiency
         for (int bin = 0; bin < h_clone->GetNbinsX(); bin++){
-            double n = h_clone->GetBinContent(bin+1); // selected = n
-            double N = hist.at(_util.k_unselected)->GetBinContent(bin+1); // generated = N
+            double n = h_clone->GetBinContent(bin+1)/_util.intrinsic_weight; // selected = n
+            double N = hist.at(_util.k_unselected)->GetBinContent(bin+1)/_util.intrinsic_weight; // generated = N
             eff_err.at(bin) = (1.0/std::sqrt(N))*std::sqrt( (n/N)*(1.0 - (n/N)));
         }
         
@@ -1981,7 +2110,21 @@ void HistogramPlotter::MakeEfficiencyPlotByCut(std::string var, bool mask_title,
         if (mask_title) h_clone->SetTitle("");
         h_clone->Draw("E same");
 
+        std::size_t found = std::string(printname).find("multi"); // Look for "multi" in the name
+        
+        // Has multi in the name,so center the axes label
+        if (found!=std::string::npos)
+            h_clone->GetXaxis()->CenterLabels();
+
+        hist_eff.at(p) = (TH1D *)h_clone->Clone(Form("h_clone_eff_%s",_util.cut_dirs.at(p).c_str() ));
+
         TH1D *h_true_nue = (TH1D *)hist.at(_util.k_unselected)->Clone("h_clone_true");
+        
+        found = std::string(printname).find(rebin_str); // Look for "rebin" in the name
+        
+        // Has rebin in the name, so normalise by bin width
+        if (found!=std::string::npos)
+            h_true_nue->Scale(1, "width");
 
         gPad->SetRightMargin(0.17);
 
@@ -2011,26 +2154,187 @@ void HistogramPlotter::MakeEfficiencyPlotByCut(std::string var, bool mask_title,
         
         delete c;
     }
+
+    // Now we will draw the efficiency by cut on the same plot
+    TCanvas * c = new TCanvas("c", "c", 500, 500);
+    c->SetTopMargin(0.11);
+    c->SetLeftMargin(0.17);
+    c->SetBottomMargin(0.11);
+
+    TLegend *leg = new TLegend(0.30, 0.59, 0.80, 0.89);
+    leg->SetNColumns(2);
+    leg->SetBorderSize(0);
+    leg->SetFillStyle(0);
+
+    for (int p = 2; p < _util.k_cuts_MAX; p++) {
+        leg->AddEntry(hist_eff.at(p), Form("%i. %s", p - 1,  _util.cut_dirs_pretty.at(p).c_str()), "l");       
+        hist_eff.at(p)->SetTitle("");
+        hist_eff.at(p)->SetMaximum(1.3);
+        hist_eff.at(p)->SetLineColor(p + 30 + 4);
+
+        if (p == _util.k_e_candidate)
+            hist_eff.at(p)->SetLineColor(kViolet-5);
+
+        if (p == _util.k_contained_frac)
+            hist_eff.at(p)->SetLineColor(kMagenta-4);
+
+        if (p == _util.k_topo_score)
+            hist_eff.at(p)->SetLineColor(kOrange+8);
+
+        if (p == _util.k_shr_moliere_avg)
+            hist_eff.at(p)->SetLineColor(30);
+
+        hist_eff.at(p)->Draw("hist,E, same");
+    }
+
+    leg->Draw();
+
+    c->Print(Form("plots/run%s/Efficiency/All_TEff_%s.pdf", _util.run_period, printname) );
+
+    delete c;
+
+
+
 }
 // -----------------------------------------------------------------------------
-void HistogramPlotter::MakeInteractionPlot(const char *print_name, std::string cut_type, std::string flav, bool scale){
+void HistogramPlotter::MakeEfficiencyPlotByCutTot(std::string var_tot, std::string var_nue, std::string var_nuebar, std::string leg_tot, std::string leg_nue, std::string leg_nuebar, bool mask_title, bool mask_ax_label, const char* pri_ax_name, const char* printname) {
+
+    std::vector<TH1D *> hist_tot(_util.k_cuts_MAX);    // The vector of histograms for nue plus nuebar / e- + e+
+    std::vector<TH1D *> hist_nue(_util.k_cuts_MAX);    // The vector of histograms for nue / e-
+    std::vector<TH1D *> hist_nuebar(_util.k_cuts_MAX); // The vector of histograms for nuebar / e+
+    TH1D *h_clone_tot, *h_clone_nue, *h_clone_nuebar;
+
+    // Helps determine what axes labels to draw 
+    std::string var_string;
+
+    // Loop over the classifications and get the histograms
+    for (unsigned int i = 0; i < _util.k_cuts_MAX; i++) {
+
+        // MC
+        _util.GetHist(f_nuexsec, hist_tot.at(i),    Form("TEff/%s_%s", var_tot.c_str() ,   _util.cut_dirs.at(i).c_str()));
+        _util.GetHist(f_nuexsec, hist_nue.at(i),    Form("TEff/%s_%s", var_nue.c_str() ,   _util.cut_dirs.at(i).c_str()));
+        _util.GetHist(f_nuexsec, hist_nuebar.at(i), Form("TEff/%s_%s", var_nuebar.c_str() ,_util.cut_dirs.at(i).c_str()));
+        
+        if (hist_tot.at(i) == NULL || hist_nue.at(i) == NULL || hist_nuebar.at(i) == NULL)
+            return;
+    }
+
+    // Loop over the cuts and draw the efficiencies
+    for (int p = 0; p < _util.k_cuts_MAX; p++) {
+
+        TCanvas * c = new TCanvas("c", "c", 500, 500);
+        c->SetTopMargin(0.11);
+
+        // Clone the histograms
+        h_clone_tot    = (TH1D *) hist_tot.at(p)->Clone();
+        h_clone_nue    = (TH1D *) hist_nue.at(p)->Clone();
+        h_clone_nuebar = (TH1D *) hist_nuebar.at(p)->Clone();
+        
+        std::vector<double> eff_err_tot(h_clone_tot->GetNbinsX());
+        std::vector<double> eff_err_nue(h_clone_nue->GetNbinsX());
+        std::vector<double> eff_err_nuebar(h_clone_nuebar->GetNbinsX());
+        
+        // Get the bin errors based on binomial dist = sqrt(e/N*(1-e))) where e = n/N is the efficiency
+        for (int bin = 0; bin < h_clone_tot->GetNbinsX(); bin++){
+            
+            // Get the errors for the nue plus nuebar hist
+            double n = h_clone_tot->GetBinContent(bin+1)/_util.intrinsic_weight; // selected = n
+            double N = hist_tot.at(_util.k_unselected)->GetBinContent(bin+1)/_util.intrinsic_weight; // generated = N
+            eff_err_tot.at(bin) = (1.0/std::sqrt(N))*std::sqrt( (n/N)*(1.0 - (n/N)));
+
+            // nue
+            n = h_clone_nue->GetBinContent(bin+1)/_util.intrinsic_weight; // selected = n
+            N = hist_nue.at(_util.k_unselected)->GetBinContent(bin+1)/_util.intrinsic_weight; // generated = N
+            eff_err_nue.at(bin) = (1.0/std::sqrt(N))*std::sqrt( (n/N)*(1.0 - (n/N)));
+
+            //nuebar
+            n = h_clone_nuebar->GetBinContent(bin+1)/_util.intrinsic_weight; // selected = n
+            N = hist_nuebar.at(_util.k_unselected)->GetBinContent(bin+1)/_util.intrinsic_weight; // generated = N
+            eff_err_nuebar.at(bin) = (1.0/std::sqrt(N))*std::sqrt( (n/N)*(1.0 - (n/N)));
+
+        }
+
+        h_clone_tot->Divide(hist_tot.at(_util.k_unselected));
+        h_clone_nue->Divide(hist_nue.at(_util.k_unselected));
+        h_clone_nuebar->Divide(hist_nuebar.at(_util.k_unselected));
+        
+        // Now set the bin errors after the divide
+        for (int bin = 0; bin < h_clone_tot->GetNbinsX(); bin++){
+            h_clone_tot->SetBinError(bin+1, eff_err_tot.at(bin));
+            h_clone_nue->SetBinError(bin+1, eff_err_nue.at(bin));
+            h_clone_nuebar->SetBinError(bin+1, eff_err_nuebar.at(bin));
+        }
+        
+        
+        h_clone_tot->SetStats(kFALSE);
+        h_clone_nue->SetLineColor(kBlue+2);
+        h_clone_nuebar->SetLineColor(kRed+2);
+        h_clone_nue->SetLineWidth(2);
+        h_clone_nuebar->SetLineWidth(2);
+        h_clone_tot->SetTitle(Form("%s;%s", _util.cut_dirs_pretty.at(p).c_str(), pri_ax_name));
+        
+        // Get rid of the ticks and the axes labels for single bin
+        if (mask_ax_label) {
+            h_clone_tot->GetXaxis()->SetLabelOffset(100);
+            h_clone_tot->GetXaxis()->SetTickSize(0);
+        }
+
+        h_clone_tot->GetXaxis()->CenterTitle();
+        h_clone_tot->GetYaxis()->SetRangeUser(0, 1);
+        h_clone_tot->SetLineColor(kBlack);
+        h_clone_tot->SetLineWidth(2);
+        _util.IncreaseLabelSize(h_clone_tot, c);
+        if (mask_title) h_clone_tot->SetTitle("");
+        h_clone_tot->Draw("E same");
+        h_clone_nue->Draw("E same");
+        h_clone_nuebar->Draw("E same");
+
+        std::size_t found = std::string(printname).find("multi"); // Look for "multi" in the name
+        
+        // Has multi in the name,so center the axes label
+        if (found!=std::string::npos)
+            h_clone_tot->GetXaxis()->CenterLabels();
+        
+        TLegend *leg = new TLegend(0.17, 0.75, 0.5, 0.89);
+        leg->SetNColumns(1);
+        leg->SetBorderSize(0);
+        leg->SetFillStyle(0);
+        leg->AddEntry(h_clone_tot, leg_tot.c_str(), "l");  
+        leg->AddEntry(h_clone_nue, leg_nue.c_str(), "l");  
+        leg->AddEntry(h_clone_nuebar, leg_nuebar.c_str(), "l");  
+
+        leg->Draw();
+
+        // Draw the run period on the plot
+        _util.Draw_Run_Period(c, 0.76, 0.915, 0.76, 0.915);
+
+        c->Print(Form("plots/run%s/Efficiency/TEff_%s_%s_combined.pdf", _util.run_period, _util.cut_dirs.at(p).c_str(), printname) );
+        
+        delete c;
+    }
+
+}
+// -----------------------------------------------------------------------------
+void HistogramPlotter::MakeInteractionPlot(std::string var, bool scale, const char* ax_name, const char *print_name, std::string cut_type, int ax_scale){
 
     std::vector<TH1D *> hist(_util.interaction_types.size());
     std::vector<double> hist_integrals(_util.interaction_types.size()); // The integrals of all the histograms
     double sum_integrals{0.0};
+    std::string rebin_str = "rebin";                     // use this as a string to search the printname for uneaven bin sizes so we can nornalise by bin width
 
     TCanvas * c = new TCanvas(Form("c_%s", print_name), "c", 500, 500);
     THStack *h_stack = new THStack();
 
     c->SetTopMargin(0.11);
+    // c->SetLeftMargin(0.15);
 
     // Derive scale factor to scale the interaction plots to 6.0e20 POT
     double scale_factor{1.0};
     if (scale){
         if (std::string(_util.run_period) =="1") 
-            scale_factor = 6.0e20 / _util.config_v.at(_util.k_Run1_MC_POT);
+            scale_factor = 2.0e20 / _util.config_v.at(_util.k_Run1_MC_POT);
         else if (std::string(_util.run_period) == "3")
-            scale_factor = 6.0e20 / _util.config_v.at(_util.k_Run3_MC_POT);
+            scale_factor = 2.0e20 / _util.config_v.at(_util.k_Run3_MC_POT);
         else
             std::cout << "Unknown Run Period Configured" << std::endl;
     }
@@ -2038,8 +2342,11 @@ void HistogramPlotter::MakeInteractionPlot(const char *print_name, std::string c
 
     for (unsigned int k = 0; k < hist.size(); k++) {
         
-        _util.GetHist(f_nuexsec, hist.at(k), Form("Interaction/h_true_%s_E_%s_%s", flav.c_str(), _util.interaction_types.at(k).c_str(), cut_type.c_str()));
+        TH1D * h_clone;
+
+        _util.GetHist(f_nuexsec, h_clone, Form("Interaction/%s_%s_%s", var.c_str(), _util.interaction_types.at(k).c_str(), cut_type.c_str()));
         
+        hist.at(k) = (TH1D*) h_clone->Clone();
 
         if (hist.at(k) == NULL) {
             std::cout << "Couldn't get all the interaction histograms so exiting function..." << std::endl;
@@ -2051,17 +2358,27 @@ void HistogramPlotter::MakeInteractionPlot(const char *print_name, std::string c
         sum_integrals += hist.at(k)->Integral();
         hist.at(k)->SetLineWidth(0);
 
+        std::size_t found = std::string(print_name).find(rebin_str); // Look for "rebin" in the name
+        
+        // Has rebin in the name, so normalise by bin width
+        if (found!=std::string::npos)
+            hist.at(k)->Scale(1, "width");
+
     }
 
     hist.at(_util.k_plot_qe) ->SetFillColor(30);
     hist.at(_util.k_plot_res)->SetFillColor(38);
     hist.at(_util.k_plot_dis)->SetFillColor(28);
     hist.at(_util.k_plot_coh)->SetFillColor(42);
-    hist.at(_util.k_plot_mec)->SetFillColor(36);
-    hist.at(_util.k_plot_nc) ->SetFillColor(1);
+    hist.at(_util.k_plot_mec)->SetFillColor(kOrange-3);
+    hist.at(_util.k_plot_tot) ->SetFillColor(kBlack);
 
     // Add the histograms to the stack
     for (unsigned int k = 0; k < hist.size(); k++) {
+        
+        if (k == _util.k_plot_tot)
+            continue;
+
         h_stack->Add(hist.at(k));
     }
 
@@ -2070,35 +2387,44 @@ void HistogramPlotter::MakeInteractionPlot(const char *print_name, std::string c
     h_stack->GetXaxis()->SetTitleSize(0.05);
     h_stack->GetYaxis()->SetLabelSize(0.05);
     h_stack->GetYaxis()->SetTitleSize(0.05);
-    gPad->SetLeftMargin(0.15);
+    gPad->SetLeftMargin(0.2);
     gPad->SetBottomMargin(0.12);
     c->Update();
-    if (flav == "nue_nuebar")h_stack->GetXaxis()->SetTitle("True #nu_{e} + #bar{#nu}_{e} Energy");
-    if (flav == "nue")       h_stack->GetXaxis()->SetTitle("True #nu_{e} Energy");
-    if (flav == "nuebar")    h_stack->GetXaxis()->SetTitle("True #bar{#nu}_{e} Energy");
-    h_stack->GetYaxis()->SetTitle("Entries");
+    h_stack->SetTitle(ax_name);
+    h_stack->GetXaxis()->CenterTitle();
 
-    if (scale) h_stack->SetMaximum(625);
-    if (flav == "nuebar") h_stack->SetMaximum(100);
-
-    TH1D *h_sum = (TH1D *)hist.at(_util.k_plot_qe)->Clone("h_sum");
-
-    for (unsigned int i = 1; i < hist.size(); i++) {
-        h_sum->Add(hist.at(i), 1);
+    std::size_t found = std::string(print_name).find("single"); // Look for "rebin" in the name
+        
+    // Has single in the name, so remove the x axes labels and ticks
+    if (found!=std::string::npos){
+        h_stack->GetXaxis()->SetLabelOffset(100);
+        h_stack->GetXaxis()->SetTickSize(0);
     }
 
+    // if (scale) h_stack->SetMaximum(ax_scale);
+    // if (flav == "nuebar") h_stack->SetMaximum(200);
+
+    // Get The sum so we can draw the stat err bar
+    TH1D *h_sum = (TH1D *)hist.at(_util.k_plot_qe)->Clone("h_sum");
+    for (unsigned int i = 1; i < hist.size(); i++) {
+        if (i == _util.k_plot_tot)
+            continue;
+
+        h_sum->Add(hist.at(i), 1);
+    }
+    h_sum->SetLineWidth(1);
+    h_sum->SetLineColor(kBlack);
     h_sum->Draw("same E");
 
     TLegend *leg_stack = new TLegend(0.65, 0.89, 0.87, 0.6);
     leg_stack->SetBorderSize(0);
     leg_stack->SetFillStyle(0);
 
-    // leg_stack->AddEntry(hist.at(_util.k_plot_nc), "NC", "f");
     leg_stack->AddEntry(hist.at(_util.k_plot_mec), Form("CC MEC (%2.1f%%)", 100 * hist_integrals.at(_util.k_plot_mec) / sum_integrals), "f");
     leg_stack->AddEntry(hist.at(_util.k_plot_coh), Form("CC Coh (%2.1f%%)", 100 * hist_integrals.at(_util.k_plot_coh) / sum_integrals), "f");
     leg_stack->AddEntry(hist.at(_util.k_plot_dis), Form("CC DIS (%2.1f%%)", 100 * hist_integrals.at(_util.k_plot_dis) / sum_integrals), "f");
     leg_stack->AddEntry(hist.at(_util.k_plot_res), Form("CC Res (%2.1f%%)", 100 * hist_integrals.at(_util.k_plot_res) / sum_integrals), "f");
-    leg_stack->AddEntry(hist.at(_util.k_plot_qe),  Form("CC QE (%2.1f%%) ", 100 * hist_integrals.at(_util.k_plot_qe) / sum_integrals), "f");
+    leg_stack->AddEntry(hist.at(_util.k_plot_qe),  Form("CC QE (%2.1f%%) ", 100 * hist_integrals.at(_util.k_plot_qe)  / sum_integrals), "f");
 
     leg_stack->Draw();
 
@@ -2108,10 +2434,11 @@ void HistogramPlotter::MakeInteractionPlot(const char *print_name, std::string c
     // Add the weight labels
     // Draw_WeightLabels(c);
 
-    c->Print(print_name);
+    c->Print(Form("plots/run%s/Interaction/True_%s_interaction_%s.pdf", _util.run_period, print_name, cut_type.c_str()));
+    delete c;
 }
 // -----------------------------------------------------------------------------
-void HistogramPlotter::MakeInteractionEfficiency(const char *print_name){
+void HistogramPlotter::MakeInteractionEfficiency(std::string var, bool mask_ax_label, const char* ax_name, const char *print_name){
 
     gStyle->SetOptStat(0);
 
@@ -2120,23 +2447,32 @@ void HistogramPlotter::MakeInteractionEfficiency(const char *print_name){
     hist.at(0).resize(_util.interaction_types.size());  // Unselected
     hist.at(1).resize(_util.interaction_types.size());  // Selected
 
-    TCanvas *c = new TCanvas();
+    TCanvas *c = new TCanvas("c", "c", 500, 500);
+    c->SetTopMargin(0.11);
 
     for (unsigned int k = 0; k < hist.at(0).size(); k++) {
         
-        _util.GetHist(f_nuexsec, hist.at(0).at(k), Form("Interaction/h_true_nue_nuebar_E_%s_unselected", _util.interaction_types.at(k).c_str()));
-        _util.GetHist(f_nuexsec, hist.at(1).at(k), Form("Interaction/h_true_nue_nuebar_E_%s_selected",   _util.interaction_types.at(k).c_str()));
+        _util.GetHist(f_nuexsec, hist.at(0).at(k), Form("Interaction/%s_%s_unselected", var.c_str(), _util.interaction_types.at(k).c_str()));
+        _util.GetHist(f_nuexsec, hist.at(1).at(k), Form("Interaction/%s_%s_selected",   var.c_str(), _util.interaction_types.at(k).c_str()));
         
         if (hist.at(0).at(k) == NULL || hist.at(1).at(k) == NULL) {
             std::cout << "Couldn't get all the interaction histograms so exiting function..." << std::endl;
             return;
         }
 
-        hist.at(0).at(k) ->GetXaxis()->SetTitle("True #nu_{e} Energy");
-        hist.at(0).at(k) ->GetYaxis()->SetTitle("Efficiency");
+        hist.at(0).at(k)->SetTitle(ax_name);
+        hist.at(1).at(k)->SetTitle(ax_name);
 
-        hist.at(1).at(k) ->GetXaxis()->SetTitle("True #nu_{e} Energy");
-        hist.at(1).at(k) ->GetYaxis()->SetTitle("Efficiency");
+        // Get rid of the ticks and the axes labels for single bin
+        if (mask_ax_label) {
+            hist.at(0).at(k)->GetXaxis()->SetLabelOffset(100);
+            hist.at(0).at(k)->GetXaxis()->SetTickSize(0);
+            hist.at(1).at(k)->GetXaxis()->SetLabelOffset(100);
+            hist.at(1).at(k)->GetXaxis()->SetTickSize(0);
+        }
+
+        hist.at(0).at(k)->GetXaxis()->CenterTitle();
+        hist.at(1).at(k)->GetXaxis()->CenterTitle();
 
     }
 
@@ -2145,9 +2481,25 @@ void HistogramPlotter::MakeInteractionEfficiency(const char *print_name){
     
     // Make the ratio histogram
     for (unsigned int type = 0; type < hist.at(0).size(); type++){
+
+
+        std::vector<double> eff_err;
+        eff_err.resize(hist.at(0).at(type)->GetNbinsX());
+        
+        // Get the bin errors based on binomial dist = sqrt(e/N*(1-e))) where e = n/N is the efficiency
+        for (int bin = 0; bin <  hist.at(1).at(type)->GetNbinsX(); bin++){
+            double n = hist.at(1).at(type)->GetBinContent(bin+1)/_util.intrinsic_weight; // selected = n
+            double N = hist.at(0).at(type)->GetBinContent(bin+1)/_util.intrinsic_weight; // generated = N
+            eff_err.at(bin) = (1.0/std::sqrt(N))*std::sqrt( (n/N)*(1.0 - (n/N)));
+        }
         
         h_ratio.at(type) = (TH1D*) hist.at(1).at(type)->Clone(Form("h_ratio_%s" ,_util.interaction_types.at(type).c_str()) );
         h_ratio.at(type)  ->Divide(hist.at(0).at(type));
+
+        // Now set the bin errors after the divide
+        for (int bin = 0; bin < h_ratio.at(type)->GetNbinsX(); bin++){
+            h_ratio.at(type)->SetBinError(bin+1, eff_err.at(bin));
+        }
 
         if (type == _util.k_plot_qe){
             h_ratio.at(_util.k_plot_qe) ->SetLineColor(30); 
@@ -2162,29 +2514,36 @@ void HistogramPlotter::MakeInteractionEfficiency(const char *print_name){
             h_ratio.at(_util.k_plot_coh)->SetLineColor(42);
         }
         if (type == _util.k_plot_mec){
-            h_ratio.at(_util.k_plot_mec)->SetLineColor(36);
+            h_ratio.at(_util.k_plot_mec)->SetLineColor(kOrange-3);
+        }
+        if (type == _util.k_plot_tot){
+            h_ratio.at(_util.k_plot_tot)->SetLineColor(kBlack);
         }
 
 
         _util.IncreaseLabelSize(h_ratio.at(type), c);
+
+        if (var == "h_int_cosbeta"){
+            h_ratio.at(type)->GetXaxis()->SetLabelSize(0.035);
+            h_ratio.at(type)->GetXaxis()->SetLabelSize(0.035);
+        }
+
         h_ratio.at(type) ->SetFillColor(0);
         h_ratio.at(type)->GetYaxis()->SetRangeUser(0, 0.6);
-        h_ratio.at(type)->GetXaxis()->SetRangeUser(0, 3.5);
+        // h_ratio.at(type)->GetXaxis()->SetRangeUser(0, 6.0);
         h_ratio.at(type)->SetLineWidth(2);
 
-        if (type == _util.k_plot_nc || type == _util.k_plot_coh) continue; // Too low stats for the plot
-        h_ratio.at(type)->Draw("hist,L,same");
+        if (type == _util.k_plot_coh) continue; // Too low stats for the plot
+        h_ratio.at(type)->Draw("hist,E,same");
 
     }
 
-    
-    
-
-    TLegend *leg_stack = new TLegend(0.55, 0.89, 0.75, 0.6);
+    TLegend *leg_stack = new TLegend(0.30, 0.7, 0.70, 0.89);
     leg_stack->SetBorderSize(0);
     leg_stack->SetFillStyle(0);
+    leg_stack->SetNColumns(2);
 
-    // leg_stack->AddEntry(hist.at(_util.k_plot_nc), "NC", "f");
+    leg_stack->AddEntry(h_ratio.at(_util.k_plot_tot), "All CC", "l");
     leg_stack->AddEntry(h_ratio.at(_util.k_plot_mec), "CC MEC", "l");
     // leg_stack->AddEntry(h_ratio.at(_util.k_plot_coh), "CC Coh", "l"); // Too low stats for the plot
     leg_stack->AddEntry(h_ratio.at(_util.k_plot_dis), "CC DIS", "l");
@@ -2194,12 +2553,16 @@ void HistogramPlotter::MakeInteractionEfficiency(const char *print_name){
     leg_stack->Draw();
 
     // Draw the run period on the plot
-    _util.Draw_Run_Period(c, 0.86, 0.915, 0.86, 0.915);
+    // _util.Draw_Run_Period(c, 0.86, 0.915, 0.86, 0.915);
+
+    _util.Draw_ubooneSim(c, 0.33, 0.92, 0.33, 0.90);
 
     // Add the weight labels
     // Draw_WeightLabels(c);
 
-    c->Print(print_name);
+    c->Print(Form("plots/run%s/Interaction/True_%s_interaction_efficiency.pdf", _util.run_period, print_name));
+
+    delete c;
 }
 // -----------------------------------------------------------------------------
 void HistogramPlotter::Plot2D_Signal_Background(const char *print_name, const char *histname){
@@ -2262,7 +2625,9 @@ void HistogramPlotter::Plot2D_Signal_Background(const char *print_name, const ch
     leg_stack->Draw();
 
     // Draw the run period on the plot
-    _util.Draw_Run_Period(c, 0.86, 0.915, 0.86, 0.915);
+    // _util.Draw_Run_Period(c, 0.86, 0.915, 0.86, 0.915);
+
+    _util.Draw_ubooneSim(c, 0.33, 0.92, 0.33, 0.90);
 
     c->Print(print_name);
 }
@@ -2290,6 +2655,7 @@ void HistogramPlotter::Save1DHists(const char *print_name, const char *histname,
 
     TCanvas * c = new TCanvas(Form("c_%s", print_name), "c", 500, 500);
     c->SetTopMargin(0.11);
+    // gPad->SetLogy();
 
     hist->SetStats(kFALSE);
 
@@ -2318,10 +2684,15 @@ void HistogramPlotter::Save2DHists(const char *print_name, const char *histname,
 
     TCanvas * c = new TCanvas(Form("c_%s", print_name), "c", 500, 500);
     c->SetTopMargin(0.11);
+    gStyle->SetPalette(kBlueGreenYellow);
 
     hist->SetStats(kFALSE);
 
     _util.IncreaseLabelSize(hist, c);
+    c->SetRightMargin(0.25);
+
+    if (std::string(histname) == "h_elec_true_cosbeta_reco_cosbeta_rebin")
+        hist->GetXaxis()->SetLabelSize(0.03);
 
     hist->Draw("colz");
 
@@ -2330,8 +2701,7 @@ void HistogramPlotter::Save2DHists(const char *print_name, const char *histname,
     // If yex (y=x) draw a y=x line to guide the eye
     TLine * line;
     if (yex){
-    
-        line = new TLine(0, 0, gPad->GetUymax(), gPad->GetUymax());
+        line = new TLine(gPad->GetUymin(), gPad->GetUymin(), gPad->GetUymax(), gPad->GetUymax());
         line->SetLineColor(kRed);
         line->SetLineWidth(2);
         line->Draw();
@@ -2340,7 +2710,15 @@ void HistogramPlotter::Save2DHists(const char *print_name, const char *histname,
     // Draw the run period on the plot
     _util.Draw_Run_Period(c, 0.76, 0.915, 0.76, 0.915);
 
+    _util.Draw_ubooneSim(c, 0.33, 0.92, 0.33, 0.90);
+
+    hist->GetZaxis()->SetTitle("Entries");
+    hist->GetZaxis()->SetTitleOffset(1.5);
+    hist->GetXaxis()->CenterTitle();
+
     c->Print(print_name);
+
+    delete c;
 }
 // -----------------------------------------------------------------------------
 void HistogramPlotter::Save2DHistsNorm(const char *print_name, const char *histname, std::string cut_type, bool yex, std::string normtype) {
@@ -2355,6 +2733,7 @@ void HistogramPlotter::Save2DHistsNorm(const char *print_name, const char *histn
 
     TCanvas * c = new TCanvas(Form("c_%s", print_name), "c", 500, 500);
     c->SetTopMargin(0.11);
+    gStyle->SetPalette(kBlueGreenYellow);
 
     hist->SetStats(kFALSE);
 
@@ -2518,5 +2897,56 @@ void HistogramPlotter::AddSysUncertainty(TH1D* h_error_hist, TH1D* h_ext, TH1D* 
 
 }
 // -----------------------------------------------------------------------------
+void HistogramPlotter::MakePurityPlot(THStack *h_stack, TH1D *h_nue, TH1D* h_nuebar, std::string histname){
+
+    TH1D* h_purity = (TH1D*) h_nue->Clone();
+    
+
+    TH1D *last = (TH1D*)h_stack->GetStack()->Last();
+
+    // Calculate the purity
+    for (int bin = 1; bin < h_nue->GetNbinsX()+1; bin ++){
+
+        double den = last->GetBinContent(bin);
+        double num = h_nue->GetBinContent(bin) + h_nuebar->GetBinContent(bin);
+
+        if (den == 0 || num == 0)
+            h_purity->SetBinContent(bin, 0.0);
+        else
+            h_purity->SetBinContent(bin,100 * num / den);
+
+    }
+
+    TCanvas *c = new TCanvas("c", "c", 500, 500);
+
+    
+    
+    h_purity->SetLineColor(kBlue+2);
+    h_purity->SetLineWidth(3);
+    h_purity->SetMinimum(0);
+    h_purity->SetMaximum(100);
+    h_purity->SetFillColor(0);
+
+    _util.IncreaseLabelSize(h_purity, c);
+
+    if (histname == "h_reco_shower_energy_cali_rebin")
+        h_purity->SetTitle(";Measured Electron Energy [GeV]; Purity [\%]");
+
+    if (histname == "h_reco_effective_cosangle_rebin"){
+        h_purity->SetTitle(";Measured Electron cos#beta; Purity [\%]");
+        h_purity->GetXaxis()->SetLabelSize(0.035);
+    }
+
+    h_purity->Draw("hist");
+    
+    _util.Draw_ubooneSim(c, 0.33, 0.925, 0.33, 0.925);
+    
+    c->Print(Form("plots/run%s/Efficiency/Purity_%s.pdf", _util.run_period, histname.c_str()));
+
+
+    delete c;
+    delete h_purity;
+
+}
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------

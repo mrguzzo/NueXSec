@@ -71,8 +71,11 @@ class HistogramPlotter{
     // The efficiency made by each cut
     void MakeEfficiencyPlotByCut(std::string var, bool mask_title, bool mask_ax_label , const char* pri_ax_name, const char* sec_ax_name, const char* printname);
     // -------------------------------------------------------------------------
+    // The efficiency by each cut for nue + nuebar, nue, nuebar overlaid
+    void MakeEfficiencyPlotByCutTot(std::string var_tot, std::string var_nue, std::string var_nuebar, std::string leg_tot, std::string leg_nue, std::string leg_nuebar, bool mask_title, bool mask_ax_label, const char* pri_ax_name, const char* printname);
+    // -------------------------------------------------------------------------
     // True Neutino energy for nues broken down by genie interaction type
-    void MakeInteractionPlot(const char* print_name, std::string cut_type, std::string flav, bool scale);
+    void MakeInteractionPlot(std::string var, bool scale, const char* ax_name, const char *print_name, std::string cut_type, int ax_scale);
     // -------------------------------------------------------------------------
     // Plot the 2D signal vs Background Plots
     void Plot2D_Signal_Background(const char* print_name, const char* histname);
@@ -84,7 +87,7 @@ class HistogramPlotter{
     void Save2DHists(const char* print_name, const char* histname, std::string cut_type, bool yex);
     // -------------------------------------------------------------------------
     // Make plot of interaction efficiency
-    void MakeInteractionEfficiency(const char *print_name);
+    void MakeInteractionEfficiency(std::string var, bool mask_ax_label, const char* ax_name, const char *print_name);
     // -------------------------------------------------------------------------
     // Plot a 2d histogram normalised by row or column
     void Save2DHistsNorm(const char *print_name, const char *histname, std::string cut_type, bool yex, std::string normtype);
@@ -92,6 +95,10 @@ class HistogramPlotter{
     // Add in the systematic uncertainty from file to the stacked histograms
     void AddSysUncertainty(TH1D* h_error_hist, TH1D* h_ext, TH1D* h_dirt, std::string histname, std::string cut_name, std::string label, std::string mode);
     // -------------------------------------------------------------------------
+    // Plot the Purity in each bin
+    void MakePurityPlot(THStack *h_stack, TH1D *h_nue, TH1D* h_nuebar, std::string histname);
+    // --------------------------------------------------------------------------
+    
 
     private:
 

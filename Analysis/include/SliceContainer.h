@@ -18,8 +18,8 @@ class SliceContainer {
 public:
 
     // -------------------------------------------------------------------------
-    // Initialise the class
-    void Initialise(TTree* tree, int type, Utility util);
+    // Initialise the class with a template function
+    template<typename T> void Initialise(T *tree, int type, Utility util);
     // -------------------------------------------------------------------------
     // Function to classify the slice
     void  SliceClassifier(int type);
@@ -34,8 +34,8 @@ public:
     // Function to classify the event by particle type of the leading shower
     void ParticleClassifier(int type);
     // -------------------------------------------------------------------------
-    // Function to Get the PPFX CV correction weight
-    double GetPPFXCVWeight();
+    // Function to Set the PPFX CV correction weight based on histogram ratio
+    void SetPPFXCVWeight();
     // -------------------------------------------------------------------------
     // Get the dEdx on the plane with the most hits
     double GetdEdxMax();
@@ -57,11 +57,25 @@ public:
     // Apply the 0.83 calibration factor to the shower energy so it is applied universally
     void CalibrateShowerEnergy();
     // -------------------------------------------------------------------------
+    // Set events that are below threshold to a new category
+    void SetThresholdEvent(int type);
+    // -------------------------------------------------------------------------
+    // Set the event as fake data
+    void SetFakeData();
+    // -------------------------------------------------------------------------
+    // Backtracked pdg of leading shower is not an electron
+    void SetNonLdgShrEvent(int type);
+    // -------------------------------------------------------------------------
+    // For cases where there were two nus in the event and the backtracked pdg was
+    // an electron then there was a nue in the event and we need to set the pdg to 
+    // an electron neutrino 
+    void ReClassifyPileUps(int type);
+    // -------------------------------------------------------------------------
 
 
+    enum flav { k_numu, k_numubar, k_nue, k_nuebar, k_FLAV_MAX};
 
-
-
+    std::vector<std::string> flav_str = {"numu","numubar","nue","nuebar"};
 
     Utility _util;
 
@@ -319,6 +333,7 @@ public:
     float true_nu_px;            // True Neutrino Px
     float true_nu_py;            // True Neutrino Py
     float true_nu_pz;            // True Neutrino Pz
+    double true_effective_angle; // True angle between electron and neutrino vectors
     
     float reco_nu_vtx_x;         // Reco Neutrino Vtx x
     float reco_nu_vtx_y;         // Reco Neutrino Vtx y
@@ -355,7 +370,7 @@ public:
     
     int   nneutron; // Truth Number of Neutrons
     
-    int   nproton;  // Truth Number of Protons
+    int   nproton;  // Truth Number of Protons with a kinetic energy (E - M_proton) > 40 MeV
     float proton_e; // Truth Proton Energy
     float proton_c; // Proton Completeness
     float proton_p; // Proton Purity
@@ -520,6 +535,8 @@ public:
     double knobRPA_CCQE_Reducedup{1.0};
     double knobNormCCCOHup{1.0};
     double knobNormNCCOHup{1.0};
+    double knobxsr_scc_Fv3up{1.0};
+    double knobxsr_scc_Fa3up{1.0};
     double knobRPAdn{1.0};
     double knobCCMECdn{1.0};
     double knobAxFFCCQEdn{1.0};
@@ -530,6 +547,8 @@ public:
     double knobRPA_CCQE_Reduceddn{1.0};
     double knobNormCCCOHdn{1.0};
     double knobNormNCCOHdn{1.0};
+    double knobxsr_scc_Fv3dn{1.0};
+    double knobxsr_scc_Fa3dn{1.0};
 
 
     
@@ -656,10 +675,8 @@ public:
     std::vector<float> *trk_llr_pid_v        = nullptr;
     std::vector<float> *trk_llr_pid_score_v  = nullptr;
     
-    TH1D* h_2D_CV_UW_PPFX_ratio_nue;
-    TH1D* h_2D_CV_UW_PPFX_ratio_nuebar;
-    TH1D* h_2D_CV_UW_PPFX_ratio_numu;
-    TH1D* h_2D_CV_UW_PPFX_ratio_numubar;
+   std::vector<TH2D*> hist_ratio;
+   std::vector<TH2D*> hist_ratio_uw;
 
 };
 

@@ -38,7 +38,7 @@ class TreeHelper{
     // ~TreeHelper(); 
 
     // The output file
-    TFile* f_nuexsec;
+    TFile* f_nuexsec_tree;
 
     // Class instances
     Utility _util;
@@ -71,8 +71,15 @@ class TreeHelper{
     float shr_bkt_purity{0.0};
     float shr_bkt_completeness{0.0};
     float shr_bkt_E{0.0}; // energy of truth matched particle to the leading shower
+    int npi0{0};
+    double pi0_e{0.0};
+    int interaction{0};
     std::vector<float> all_shr_hits;
     std::vector<float> all_shr_energies;
+    double effective_angle{0.0};     // The angle between the vector from the target to nu vtx compared to the reconstructed shower direction.
+    double cos_effective_angle{0.0}; // The cosine of the angle between the vector from the target to nu vtx compared to the reconstructed shower direction.
+    double true_effective_angle{0.0};     // True angle between electron and neutrino vectors
+    double cos_true_effective_angle{0.0}; // True angle between electron and neutrino vectors
 
 
     // Weights
@@ -89,6 +96,8 @@ class TreeHelper{
     double knobRPA_CCQE_Reducedup;
     double knobNormCCCOHup;
     double knobNormNCCOHup;
+    double knobxsr_scc_Fv3up;
+    double knobxsr_scc_Fa3up;
     double knobRPAdn;
     double knobCCMECdn;
     double knobAxFFCCQEdn;
@@ -99,13 +108,15 @@ class TreeHelper{
     double knobRPA_CCQE_Reduceddn;
     double knobNormCCCOHdn;
     double knobNormNCCOHdn;
+    double knobxsr_scc_Fv3dn;
+    double knobxsr_scc_Fa3dn;
 
 
 
-    TTree * tree;       // Main tree with the selected events
-    TTree * nue_tree;       // Main tree with the selected events for intrinsic nue sample
-    TTree * dedx_tree;  // Tree for optimising the dedx cut
-    TTree * counter_tree; // Tree for storing the selection results
+    TTree * tree;             // Main tree with the selected events
+    TTree * nue_tree;         // Main tree with the selected events for intrinsic nue sample
+    TTree * dedx_tree;        // Tree for optimising the dedx cut
+    TTree * counter_tree;     // Tree for storing the selection results
     TTree * nue_counter_tree; // Tree for storing the nue selection results
 
 
@@ -114,7 +125,6 @@ class TreeHelper{
     float shr_tkfit_dedx_Y{0.0},       shr_tkfit_dedx_V{0.0},       shr_tkfit_dedx_U{0.0};
     float shr_distance{0.0};
     float shr_theta{0.0};
-    int npi0{0};
 
     std::string cut;
 
@@ -175,6 +185,8 @@ class TreeHelper{
     double count_cosmic_nue{0.0};
     double count_unmatched_nuebar{0.0};
     double count_cosmic_nuebar{0.0};
+    double count_thr_nue{0.0};
+    double count_thr_nuebar{0.0};
     double count_total_mc{0.0};
     double count_data{0.0};
     double count_ext{0.0};

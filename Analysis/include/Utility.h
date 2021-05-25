@@ -35,6 +35,11 @@
 #include "TLatex.h"
 #include "TRandom3.h"
 #include "TColor.h"
+#include "TMatrixD.h"
+#include "TVectorD.h"
+#include "TChain.h"
+#include "TDecompSVD.h"
+#include "TObjString.h"
 
 /*
 
@@ -67,14 +72,11 @@ public:
     // Get a 2D histogram from a file
     bool GetHist(TFile* f, TH2D* &h, TString string);
     // -------------------------------------------------------------------------
-    // Check whether a weight has a suitable value
-    void CheckWeight(double &weight);
-    // -------------------------------------------------------------------------
-    // Check whether a weight has a suitable value
-    void CheckWeight(float &weight);
+    // Check whether a weight has a suitable value, templated with double and float
+    template<typename T> void CheckWeight(T &weight);
     // -------------------------------------------------------------------------
     // Get the CV weight correction
-    double GetCVWeight(int type, double weightSplineTimesTune, double ppfx_cv, double nu_e, int nu_pdg, bool infv);
+    double GetCVWeight(int type, double weightSplineTimesTune, double ppfx_cv, double nu_e, int nu_pdg, bool infv, int interaction, double elec_e);
     // -------------------------------------------------------------------------
     // Get the pi0 weight correction
     void GetPiZeroWeight(double &weight, int pizero_mode, int nu_pdg, int ccnc, int npi0, double pi0_e);
@@ -121,7 +123,50 @@ public:
     // Check if a specific histogram exists in the given vector of strings
     bool CheckHistogram(std::vector<std::string> vector, TString hist_name);
     // -------------------------------------------------------------------------
+    // Turn off the intrinsic nue mode
+    void TurnoffIntrinsicMode(){intrinsic_mode = (char*)"empty";};
     // -------------------------------------------------------------------------
+    // Calculate a covariance matrix
+    void CalcCovariance(std::vector<TH1D*> h_universe, TH1D *h_CV, TH2D *h_cov);
+    // -------------------------------------------------------------------------
+    // Calculate a correlation matrix
+    void CalcCorrelation(TH1D *h_CV, TH2D  *h_cov, TH2D *h_cor);
+    // -------------------------------------------------------------------------
+    // Calculate a fractional covariance matrix
+    // ** Requires the input frac cov to be a cloned version of the covariance matrix **
+    void CalcCFracCovariance(TH1D *h_CV, TH2D *h_frac_cov);
+    // -------------------------------------------------------------------------
+    // Calulate a chi squared using a covarinace matrix, for a model to data
+    void CalcChiSquared(TH1D* h_model, TH1D* h_data, TH2D* cov, double &chi, int &ndof, double &pval);
+    // -------------------------------------------------------------------------
+    // Calculate a chi squared using a covarinace matrix, for a model to data with no correlations between bins
+    void CalcChiSquaredNoCorr(TH1D* h_model, TH1D* h_data, TH2D* cov, double &chi, int &ndof, double &pval);
+    // -------------------------------------------------------------------------
+    // Set the axes names of the cross section plots
+    void SetAxesNames();
+    // -------------------------------------------------------------------------
+    // Undo a bin width scaling
+    void UndoBinWidthScaling(TH1D* &hist);
+    // -------------------------------------------------------------------------
+    // Save a 1D hsitogram as a PDF
+    void Save1DHists(const char *print_name, TH1D* hist, const char* draw_option);
+    // -------------------------------------------------------------------------
+    // Save a 2D hsitogram as a PDF
+    void Save2DHists(const char *print_name, TH2D* hist, const char* draw_option);
+    // -------------------------------------------------------------------------
+    // Convert 2D histogram to bin index and then save it to pdf
+    void Save2DHistsBinIndex(const char *print_name, TH2D* hist, const char* draw_option);
+    // -------------------------------------------------------------------------
+    // Apply matrix to smear from true to reco space
+    void MatrixMultiply(TH1D* h_true, TH1D* &h_reco, TH2D* matrix, std::string option, bool norm);
+    // -------------------------------------------------------------------------
+    // Change units of covariane matrix so we can add them
+    void ConvertCovarianceUnits(TH2D* &h_cov, TH1D *h_input, TH1D* h_output);
+    // -------------------------------------------------------------------------
+    // Convert a covariance matrix from un-bin width normalised to bin-width normalised units
+    void ConvertCovarianceBinWidth(TH2D* &h_cov, TH1D *h_input);
+    // -------------------------------------------------------------------------
+
 
     // Variables
     std::string red     = "\033[0;31m";
@@ -133,7 +178,31 @@ public:
     std::string reset   = "\033[0m";
 
     // Bins for the reconstructed shower energy
-    std::vector<double> reco_shr_bins = { 0.0, 0.23, 0.41, 0.65, 0.94, 1.35, 1.87, 2.32, 4.0};
+    std::vector<double> reco_shr_bins    = { 0.0, 0.30, 0.47, 0.70, 0.99, 1.43, 3.0, 6.0};
+
+    // Bins for reco shr beta
+    std::vector<double> reco_shr_bins_ang = { 0.0, 6.0, 13.5, 20.0, 27.5, 39.5, 180};
+
+    // Bins for reco shr cos beta
+    std::vector<double> reco_shr_bins_cang = {-1.0, 0.6, 0.79, 0.90, 0.95, 1.0};
+    // std::vector<double> reco_shr_bins_cang = {-1.0, 0.6, 0.81, 0.91, 0.95, 1.0};
+
+    // Fine truth Binning
+    std::vector<double> true_shr_bins = { 0.0, 0.4, 0.5, 0.6, 0.7, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.15, 2.3, 2.6, 3.2, 6.0};
+
+    std::vector<double> true_shr_bins_ang = { 0, 3, 6, 10, 12, 15, 20, 22, 24, 26, 28, 32, 36, 40, 45, 50, 60, 70, 80, 90, 100, 120, 150, 180};
+
+    std::vector<double> true_shr_bins_cang = {-1, -0.8, -0.6, -0.4, -0.2, 0.0, 0.2, 0.4, 0.6, 0.8, 1.0};
+
+    // Neutrino Energy Threshold to integrate from
+    // Flux bins are 0.00 ,0.06, 0.125, 0.25, 0.5, 0.75, 1.00, 1.25, 1.50, 1.75, 2.00, 2.25, 2.50, 2.75, 3.00, 3.25, 3.50, 4.00, 5.00
+    double energy_threshold = 0.06; // GeV
+    double elec_threshold   = 0.12; // GeV
+
+    // For MCC8 values
+    // double energy_threshold = 0.25; // GeV
+    // double elec_threshold   = 0.0; // GeV
+    
     
     bool slim                      = false;
     bool make_histos               = false;
@@ -152,27 +221,35 @@ public:
     bool use_gpvm                  = false; // choose whether you are on the gpvm or Krish's personal laptop
 
     // inputs 
-    char * mc_file_name          = (char *)"empty";
-    char * ext_file_name         = (char *)"empty";
-    char * data_file_name        = (char *)"empty";
-    char * dirt_file_name        = (char *)"empty";
-    char * mc_file_name_out      = (char *)"empty";
-    char * ext_file_name_out     = (char *)"empty";
-    char * data_file_name_out    = (char *)"empty";
-    char * dirt_file_name_out    = (char *)"empty";
-    char * variation             = (char *)"empty";
-    char * variation_file_name   = (char *)"empty";
-    char * mc_tree_file_name_out = (char *)"empty";
-    char * hist_file_name        = (char *)"empty";
-    char * tree_file_name        = (char *)"empty";
-    char * run_period            = (char *)"empty";
-    char * sysmode               = (char *)"default";
-    char * xsecmode              = (char *)"default";
-    char * xsec_rw_mode          = (char *)"default"; // choose whether to reweight by cut or the final selection
-    char * xsec_labels           = (char *)"all";
-    char * uplotmode             = (char *)"default";
-    char * intrinsic_mode        = (char *)"default"; // choose whether to override the nue component to accomodate the intrinsic nue sample
-    char * sysplot               = (char *)"tot";     // what systematic uncertainty to plot on the CV histograms
+    char * mc_file_name            = (char *)"empty";
+    char * ext_file_name           = (char *)"empty";
+    char * data_file_name          = (char *)"empty";
+    char * dirt_file_name          = (char *)"empty";
+    char * mc_file_name_out        = (char *)"empty";
+    char * ext_file_name_out       = (char *)"empty";
+    char * data_file_name_out      = (char *)"empty";
+    char * dirt_file_name_out      = (char *)"empty";
+    char * variation               = (char *)"empty";
+    char * variation_file_name     = (char *)"empty";
+    char * mc_tree_file_name_out   = (char *)"empty";
+    char * ext_tree_file_name_out  = (char *)"empty";
+    char * data_tree_file_name_out = (char *)"empty";
+    char * dirt_tree_file_name_out = (char *)"empty";
+    char * hist_file_name          = (char *)"empty";
+    char * tree_file_name          = (char *)"empty";
+    char * run_period              = (char *)"empty";
+    char * sysmode                 = (char *)"default";
+    char * xsecmode                = (char *)"default";
+    char * xsec_rw_mode            = (char *)"default";  // choose whether to reweight by cut or the final selection
+    char * xsec_var                = (char *)"elec_E";   // What variable to do the cross section as a function of
+    char * xsec_labels             = (char *)"all";
+    char * uplotmode               = (char *)"default";
+    char * intrinsic_mode          = (char *)"default";  // choose whether to override the nue component to accomodate the intrinsic nue sample
+    char * sysplot                 = (char *)"tot";      // what systematic uncertainty to plot on the CV histograms
+    char * xsec_smear_mode         = (char *)"er";       // what smearing do we want to apply to the measurement? mcc8 = Marco's smearing, response = smearing using a response matrix and compare event rates
+    char * xsec_bin_mode           = (char *)"standard"; // Choose whether to use standard binning (reco = truth) or fine truth binning 
+    char * scale_bins              = (char *)"standard";    // Choose whether to use scale the histograms by bin width. Options are standard or width
+    char * fakedataname            = (char *)"empty";
     int num_events{-1};
     int verbose{1}; // level 0 doesn't print cut summary, level 1 prints cut summary [default is 1 if unset]
     int _weight_tune{1}; // Use the GENIE Tune
@@ -181,6 +258,11 @@ public:
     int _weight_ext{1};  // Weight the EXT events
     int _pi0_correction{1};  // The pi0 correction 0 == no correction, 1 == normalisation factor, 2 == energy dependent scaling
 
+    bool zoom{false};        // bool to decide whether to zoom in on the plots
+    bool isfakedata{false};  // bool for using MC as fake data
+    bool isvariation{false}; // Is some different input to the selection
+    bool usefluggflux{false};
+
 
     // Weight configurations
     bool weight_tune{true}; // Use the GENIE Tune
@@ -188,6 +270,7 @@ public:
     bool weight_dirt{true}; // Weight the Dirt events
     bool weight_ext{true};  // Weight the EXT events
     int  pi0_correction{1}; // The pi0 correction 0 == no correction, 1 == normalisation factor, 2 == energy dependent scaling
+    bool tune_mec{false};
 
     // Scale factors to scale samples to data)
     double mc_scale_factor     = 1.0;
@@ -210,6 +293,7 @@ public:
         "Run3_Data_POT",
         "Run3_Data_trig",
         "Run3_EXT_trig",
+        "Run3_Intrinsic_POT",
         "x1", "x2", "y1", "y2", "z1", "z2"
     };
 
@@ -226,6 +310,7 @@ public:
                 k_Run3_Data_POT,
                 k_Run3_Data_trig,
                 k_Run3_EXT_trig,
+                k_Run3_Intrinsic_POT,
                 k_config_x1,
                 k_config_x2,
                 k_config_y1,
@@ -293,15 +378,17 @@ public:
                 "nuebar_cc",
                 "nu_out_fv",
                 "cosmic",
-                "cosmic_nue",    // Another special category to separate standard nues from other cosmics. This category contains mis-reco'd nues as cosmics. We separate these out so we can count the efficency denominator properly
+                "cosmic_nue", 
                 "cosmic_nuebar",
                 "numu_cc",
                 "numu_cc_pi0",
                 "nc",
                 "nc_pi0",
                 "unmatched",
-                "unmatched_nue", // This is a special category to count nue/nuebar cc interactions that occur inside the fv, but were not reconstructed at all (so purity ends up < 0!). We need these for the efficeicny denom. 
+                "unmatched_nue",
                 "unmatched_nuebar",
+                "thr_nue",    // below threshold nue 
+                "thr_nuebar", // below threshold nuebar  
                 "ext",
                 "data",
                 "dirt"
@@ -314,7 +401,7 @@ public:
                 "CC_DIS",
                 "CC_Coh",
                 "CC_MEC",
-                "NC"
+                "CC_Tot"
                 };
     
      // Names of the Particle types
@@ -370,7 +457,7 @@ public:
         k_plot_dis,
         k_plot_coh,
         k_plot_mec,
-        k_plot_nc,
+        k_plot_tot,
         k_interactions_MAX
     };
 
@@ -389,6 +476,8 @@ public:
                 k_unmatched,
                 k_unmatched_nue,
                 k_unmatched_nuebar,
+                k_thr_nue,
+                k_thr_nuebar,
                 k_leg_ext,
                 k_leg_data,
                 k_leg_dirt,
@@ -475,6 +564,8 @@ public:
         k_count_unmatched_nuebar,
         k_count_cosmic_nuebar,
         k_count_total_mc,
+        k_count_thr_nue,
+        k_count_thr_nuebar,
         
         k_count_data,
         k_count_ext,
@@ -508,7 +599,6 @@ public:
 
     // Variables to get the systematic uncertainty by cut for
     enum TH1D_cut_vars {
-        k_cut_softwaretrig,
         k_cut_nslice,
         k_cut_shower_multiplicity,
         k_cut_track_multiplicity,
@@ -531,13 +621,16 @@ public:
         k_cut_shower_energy_cali_rebin,
         k_cut_flash_time,
         k_cut_flash_pe,
+        k_cut_effective_angle,
+        k_cut_effective_cosangle,
+        k_cut_effective_angle_rebin,
+        k_cut_effective_cosangle_rebin,
         k_cut_vars_max
     };
 
     // ------------------------------------------
     // variables to plot PlotVariations and SysVariations
         std::vector<std::string> vec_hist_name = {
-        "h_reco_softwaretrig",
         "h_reco_nslice",
         "h_reco_shower_multiplicity",
         "h_reco_track_multiplicity",
@@ -559,12 +652,15 @@ public:
         "h_reco_shower_energy_cali",
         "h_reco_shower_energy_cali_rebin",
         "h_reco_flash_time",
-        "h_reco_flash_pe"
+        "h_reco_flash_pe",
+        "h_reco_effective_angle",
+        "h_reco_effective_cosangle",
+        "h_reco_effective_angle_rebin",
+        "h_reco_effective_cosangle_rebin",
     };
  
     // x axis label for those plots
     std::vector<std::string> vec_axis_label = {
-        "Software Trigger",
         "Pandora Slice ID",
         "Shower Multiplicity",
         "Track Multiplicity",
@@ -580,13 +676,17 @@ public:
         "Hit Ratio",
         "Pandora Cosmic Impact Parameter 3D [cm]",
         "Contained Fraction (PFP hits in FV / hits in slice)",
-        "Leading Shower Moliere Average [degrees]",
-        "Leading Shower Theta [degrees]",
-        "Leading Shower Phi [degrees]",
+        "Leading Shower Moliere Average [deg]",
+        "Leading Shower Theta [deg]",
+        "Leading Shower Phi [deg]",
         "Reconstructed Leading Shower Energy [GeV]",
         "Reconstructed Leading Shower Energy [GeV]",
         "Largest Flash Time [#mus]",
-        "Largest Flash Intensity [PE]"
+        "Largest Flash Intensity [PE]",
+        "#beta [deg]",
+        "cos(#beta) [deg]",
+        "#beta [deg]",
+        "cos(#beta) [deg]"
     };
 
     // list of detector variations
@@ -604,6 +704,22 @@ public:
         "WireModThetaYZ_withoutSigmaSplines",
         "WireModdEdX"
    };
+
+
+    // Global access to histogram names
+    std::vector<std::string> var_labels_xsec = {};
+
+    std::vector<std::string> var_labels_events = {};
+
+    std::vector<std::string> var_labels_eff = {};
+
+    std::string smear_hist_name;
+    
+    std::string ac_hist_name;
+
+    std::vector<std::string> vars = {};
+
+    double xsec_scale;
 
 }; // End Class Utility
 

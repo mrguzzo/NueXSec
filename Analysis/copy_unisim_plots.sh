@@ -1,8 +1,11 @@
 # Script to copy all the beamline plots we want to put into the technote into a common folder
 # this will make it easier to drag and drop them into the overleaf folder
 
-file_path=/Users/kvjmistry/Documents/work/NueXSec/Analysis/plots/run1/Systematics/
-copy_path=/Users/kvjmistry/Documents/work/NueXSec/Analysis/plots/run1/Systematics/Beamline
+# Change this here to the path of where your NueXSec folder lives
+USER_PATH=/Users/kvjmistry/work/
+
+file_path=$USER_PATH/NueXSec/Analysis/plots/run1/Systematics/
+copy_path=$USER_PATH/NueXSec/Analysis/plots/run1/Systematics/Beamline
 
 # Make the directory
 mkdir -p $copy_path
@@ -27,16 +30,22 @@ vars=(
 
 # Do the copy
 for i in ${!vars[*]}; do 
-    echo "cp $file_path${vars[$i]}/reco_el_E/*bkg* $copy_path"
-    cp $file_path${vars[$i]}/reco_el_E/*bkg* $copy_path
+    echo "cp $file_path${vars[$i]}/reco_el_E/*data_xsec* $copy_path"
+    cp $file_path${vars[$i]}/reco_el_E/*data_xsec* $copy_path
     echo "cp $file_path${vars[$i]}/reco_el_E/*mc_xsec* $copy_path"
     cp $file_path${vars[$i]}/reco_el_E/*mc_xsec* $copy_path
-    echo "cp $file_path${vars[$i]}/true_el_E/*eff* $copy_path"
-    cp $file_path${vars[$i]}/true_el_E/*eff* $copy_path
+    echo "cp $file_path${vars[$i]}/true_el_E/*mc_xsec_smear* $copy_path"
+    cp $file_path${vars[$i]}/true_el_E/*mc_xsec_smear* $copy_path
+    echo "cp $file_path${vars[$i]}/reco_el_cang/*data_xsec* $copy_path"
+    cp $file_path${vars[$i]}/reco_el_cang/*data_xsec* $copy_path
+    echo "cp $file_path${vars[$i]}/reco_el_cang/*mc_xsec* $copy_path"
+    cp $file_path${vars[$i]}/reco_el_cang/*mc_xsec* $copy_path
+    echo "cp $file_path${vars[$i]}/true_el_cang/*mc_xsec_smear* $copy_path"
+    cp $file_path${vars[$i]}/true_el_cang/*mc_xsec_smear* $copy_path
 done
 
 
-copy_path=/Users/kvjmistry/Documents/work/NueXSec/Analysis/plots/run1/Systematics/Genie_Unisim
+copy_path=$USER_PATH/NueXSec/Analysis/plots/run1/Systematics/Genie_Unisim
 
 # Make the directory
 mkdir -p $copy_path
@@ -50,22 +59,29 @@ vars=(
   DecayAngMEC
   ThetaDelta2Npi
   ThetaDelta2NRad
-  RPA_CCQE_Reduced
   NormCCCOH
   NormNCCOH
+  xsr_scc_Fa3
+  xsr_scc_Fv3
 )
 
 # Do the copy
 for i in ${!vars[*]}; do 
-    echo "cp $file_path${vars[$i]}/reco_el_E/*bkg* $copy_path"
-    cp $file_path${vars[$i]}/reco_el_E/*bkg* $copy_path
+    echo "cp $file_path${vars[$i]}/reco_el_E/*data_xsec* $copy_path"
+    cp $file_path${vars[$i]}/reco_el_E/*data_xsec* $copy_path
     echo "cp $file_path${vars[$i]}/reco_el_E/*mc_xsec* $copy_path"
     cp $file_path${vars[$i]}/reco_el_E/*mc_xsec* $copy_path
-    echo "cp $file_path${vars[$i]}/true_el_E/*eff* $copy_path"
-    cp $file_path${vars[$i]}/true_el_E/*eff* $copy_path
+    echo "cp $file_path${vars[$i]}/true_el_E/*mc_xsec_smear* $copy_path"
+    cp $file_path${vars[$i]}/true_el_E/*mc_xsec_smear* $copy_path
+     echo "cp $file_path${vars[$i]}/reco_el_cang/*data_xsec* $copy_path"
+    cp $file_path${vars[$i]}/reco_el_cang/*data_xsec* $copy_path
+    echo "cp $file_path${vars[$i]}/reco_el_cang/*mc_xsec* $copy_path"
+    cp $file_path${vars[$i]}/reco_el_cang/*mc_xsec* $copy_path
+    echo "cp $file_path${vars[$i]}/true_el_cang/*mc_xsec_smear* $copy_path"
+    cp $file_path${vars[$i]}/true_el_cang/*mc_xsec_smear* $copy_path
 done
 
-copy_path=/Users/kvjmistry/Documents/work/NueXSec/Analysis/plots/run1/Systematics/DetVar
+copy_path=$USER_PATH/NueXSec/Analysis/plots/run1/Systematics/DetVar
 
 # Make the directory
 mkdir -p $copy_path
@@ -86,12 +102,18 @@ vars=(
 
 # Do the copy
 for i in ${!vars[*]}; do 
-    echo "cp $file_path${vars[$i]}/reco_el_E/*bkg* $copy_path"
-    cp $file_path${vars[$i]}/reco_el_E/*bkg* $copy_path
+    echo "cp $file_path${vars[$i]}/reco_el_E/*data_xsec* $copy_path"
+    cp $file_path${vars[$i]}/reco_el_E/*data_xsec* $copy_path
     echo "cp $file_path${vars[$i]}/reco_el_E/*mc_xsec* $copy_path"
     cp $file_path${vars[$i]}/reco_el_E/*mc_xsec* $copy_path
-    echo "cp $file_path${vars[$i]}/true_el_E/*eff* $copy_path"
-    cp $file_path${vars[$i]}/true_el_E/*eff* $copy_path
+    echo "cp $file_path${vars[$i]}/true_el_E/*mc_xsec_smear* $copy_path"
+    cp $file_path${vars[$i]}/true_el_E/*mc_xsec_smear* $copy_path
+    echo "cp $file_path${vars[$i]}/reco_el_cang/*data_xsec* $copy_path"
+    cp $file_path${vars[$i]}/reco_el_cang/*data_xsec* $copy_path
+    echo "cp $file_path${vars[$i]}/reco_el_cang/*mc_xsec* $copy_path"
+    cp $file_path${vars[$i]}/reco_el_cang/*mc_xsec* $copy_path
+    echo "cp $file_path${vars[$i]}/true_el_cang/*mc_xsec_smear* $copy_path"
+    cp $file_path${vars[$i]}/true_el_cang/*mc_xsec_smear* $copy_path
 done
 
 

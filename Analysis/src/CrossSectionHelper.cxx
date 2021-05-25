@@ -49,7 +49,7 @@ void CrossSectionHelper::Initialise(Utility _utility){
         if (!_util.use_gpvm)
             flux_file_name = "Systematics/output_fhc_uboone_run0.root";
         else
-            flux_file_name = "/uboone/data/users/kmistry/work/PPFX/uboone/beamline_zero_threshold_v46/FHC/output_uboone_fhc_run0_merged.root";
+            flux_file_name = "/uboone/data/users/kmistry/work/PPFX/uboone/beamline_zero_threshold_v46/FHC/sept/output_uboone_fhc_run0_merged.root";
 
 
         std::cout << "Using Flux file name: \033[0;31m" << flux_file_name << "\033[0m" <<  std::endl;
@@ -57,11 +57,10 @@ void CrossSectionHelper::Initialise(Utility _utility){
         if (boolfile == false) gSystem->Exit(0); 
     }
     else if (std::string(_util.run_period) == "3") {
-        
         if (!_util.use_gpvm)
             flux_file_name = "Systematics/output_rhc_uboone_run0.root";
         else
-            flux_file_name = "/uboone/data/users/kmistry/work/PPFX/uboone/beamline_zero_threshold_v46/RHC/output_uboone_rhc_run0_merged.root";
+            flux_file_name = "/uboone/data/users/kmistry/work/PPFX/uboone/beamline_zero_threshold_v46/RHC/sept/output_uboone_rhc_run0_merged.root";
         
         
         std::cout << "Using Flux file name: \033[0;31m" << flux_file_name << "\033[0m" <<  std::endl;
@@ -74,7 +73,13 @@ void CrossSectionHelper::Initialise(Utility _utility){
     }
     
     // Get the integrated flux for the CV
-    integrated_flux = GetIntegratedFlux(0, "CV", "", "", 0, 0.0, 0.0);
+    integrated_flux = GetIntegratedFluxCV();
+
+    // Turn this on for using the FLUGG flux as the integrated flux
+    if (_util.usefluggflux){
+        std::cout << "Overwriting default with flugg flux input"<< std::endl;
+        integrated_flux = GetIntegratedFluxFLUGG();
+    }
 
 
     // Now lets open the beamline variation files
@@ -89,21 +94,70 @@ void CrossSectionHelper::Initialise(Utility _utility){
 
     std::cout << "Volume used in cuts: " << volume << std::endl;
 
-    N_target_MC   = (lar_density_data   * volume * NA * N_nuc) / m_mol; // Now use the same number of targets for MC and data since we fixed the simulated density in MCC9
+    N_target_MC   = (lar_density_mc   * volume * NA * N_nuc) / m_mol; // Now use the same number of targets for MC and data since we fixed the simulated density in MCC9
     std::cout << "Number of Target Nucleons in MC: " << N_target_MC << std::endl;
     
     N_target_Data = (lar_density_data * volume * NA * N_nuc) / m_mol;
     std::cout << "Number of Target Nucleons in Data: " << N_target_Data << std::endl;
     std::cout << "  "<< std::endl;
 
-
-    // Create and initialise vector of histograms
+    // Create and initialise vector of histograms -- dont do this in the case we want to just write out the file lists
     InitialiseHistograms(std::string(_util.xsecmode));
 
     // Reweight the events by cut to get the sys uncertainty for certain plots in the selection
     // do this rather than reweight events at the end of the selection
     if (std::string(_util.xsec_rw_mode) == "rw_cuts"){
         LoopEventsbyCut();
+        return;
+    }
+
+    // Initialise the file lists
+    if (std::string(_util.xsecmode) == "txtlist"){
+        // Initialise output file lists
+        evt_dist_sig.open(Form("files/txt/run%s_evt_dist_sig.txt",_util.run_period));
+        
+        evt_dist_gen.open(Form("files/txt/run%s_evt_dist_gen.txt",_util.run_period));
+        
+        evt_dist_bkg.open(Form("files/txt/run%s_evt_dist_bkg.txt",_util.run_period));
+
+        evt_dist_data.open(Form("files/txt/run%s_evt_dist_data.txt",_util.run_period));
+        evt_dist_data << _util.vars.at(k_var_recoX) << "\n";
+
+        f_out = TFile::Open("files/trees/krish_test.root", "UPDATE");
+
+        // Also init the TTrees
+        event_tree = new TTree("events", "events");
+        event_tree->Branch("isData",     &isData);
+        event_tree->Branch("isSignal",   &isSignal);
+        event_tree->Branch("isSelected", &isSelected);
+        event_tree->Branch("xTrue",      &xTrue);
+        event_tree->Branch("xReco",      &xReco);
+        event_tree->Branch("cv_weight",  &weight);
+        event_tree->Branch("weights", "std::vector<float>", &ev_weight);
+        meta_tree  = new TTree("metadata", "metadata");
+        integrated_flux_tree = integrated_flux*flux_scale_factor;
+        meta_tree->Branch("flux",       &integrated_flux_tree);
+        meta_tree->Branch("nTargets",   &n_targ);
+        meta_tree->Branch("potData",    &potData);
+        meta_tree->Branch("potMC",      &potMC);
+        meta_tree->Branch("nUniverses", &nUniverses);
+        meta_tree->Fill();
+    }
+
+    // Load in the detector variation CV only if detector variation
+    if (_util.isvariation && std::string(_util.variation) != "CV"){
+        LoadDetvarCVHist();
+    }
+    
+    // Load in NuWro file and add true cross section to file
+    if (std::string(_util.xsec_rw_mode) == "gen"){
+        SaveGenXSec();
+        return;
+    }
+
+    // Load in NuWro file and add true cross section to file
+    if (std::string(_util.xsec_rw_mode) == "pi0"){
+        CheckPi0CrossSection();
         return;
     }
 
@@ -119,13 +173,36 @@ void CrossSectionHelper::LoopEvents(){
 
     // Loop over the tree entries and weight the events in each universe
     for (unsigned int ievent = 0; ievent < tree->GetEntries(); ievent++){
-
+        
         tree->GetEntry(ievent); 
 
-        if (shr_energy_cali > 4.0 && *classification == "data" ) std::cout << "reco shower energy was:  " << shr_energy_cali << "  Consider updating the bins" <<std::endl;
+        if (ievent % 20000 == 0 && ievent > 0) std::cout << "On entry " << ievent/10000.0 <<"0k " << std::endl;
+
+        // Set the reco and true variables to bin in
+        
+        // Electron/Shower Energy
+        if (std::string(_util.xsec_var) =="elec_E"){
+            recoX = shr_energy_cali;
+            trueX = elec_e;
+        }
+        // Electron/Shower beta
+        else if (std::string(_util.xsec_var) =="elec_ang"){
+            recoX = effective_angle;
+            trueX = true_effective_angle;
+        }
+        // Electron/Shower cos(beta)
+        else if (std::string(_util.xsec_var) =="elec_cang"){
+            recoX = cos_effective_angle;
+            trueX = cos_true_effective_angle;
+        }
+        else {
+            std::cout << "Unsupported parameter...exiting!" << std::endl;
+            return;
+        }
+
+        if (shr_energy_cali > 8.0 && *classification == "data" ) std::cout << _util.red << "reco shower energy was:  " << shr_energy_cali << "  Consider updating the bins " << run << " " << subrun << " " << event  << _util.reset<<std::endl;
 
         double cv_weight = weight; // SplinetimesTune * PPFX CV * Pi0 Tune
-
         double weight_dirt = weight; // Use this for estimating dirt and POT sys
         double weight_ext  = weight;  // Use this for estimating pot sys
 
@@ -151,25 +228,48 @@ void CrossSectionHelper::LoopEvents(){
                 double weight_uni{1.0}; 
 
                 // Set the weight for universe i
-                SetUniverseWeight(reweighter_labels.at(label), weight_uni, weight_dirt, weight_ext, weightSplineTimesTune, *classification, cv_weight, uni, nu_pdg, true_energy, numi_ang);
+                SetUniverseWeight(reweighter_labels.at(label), weight_uni, weight_dirt, weightSplineTimesTune, *classification, cv_weight, uni, nu_pdg, true_energy, numi_ang, npi0, pi0_e);
 
                 // Signal event
                 if ((*classification == "nue_cc" || *classification == "nuebar_cc" || *classification == "unmatched_nue" || *classification == "unmatched_nuebar") && passed_selection) {
                     
                     // Fill histograms
-                    FillHists(label, uni, k_xsec_sig, weight_uni, shr_energy_cali, elec_e);
-                    FillHists(label, uni, k_xsec_sel, cv_weight, shr_energy_cali, elec_e);  // Selected events (N term) we dont weight
+                    if (std::string(_util.xsecmode) != "txtlist"){
+                           
+                        FillHists(label, uni, k_xsec_sig, weight_uni, recoX, trueX);
+                        FillHists(label, uni, k_xsec_sel, cv_weight, recoX, trueX);  // Selected events (N term) we dont weight
+
+                        // Fill 2D histo of true energy and angle only for the CV
+                        if (std::string(_util.xsec_bin_mode) == "e_ang" && reweighter_labels.at(label) == "CV" && uni == 0){
+                            h_2D_CV_binning->Fill(elec_e, true_effective_angle, cv_weight);
+                        }
+                    
+                    }
+                    // Just save the event weights
+                    else {
+                        ev_weight.push_back(weight_uni);
+                    }
 
                 }
 
                 // Background event
                 if ( *classification == "nu_out_fv"  || *classification == "cosmic"       ||
                      *classification == "numu_cc"    || *classification == "numu_cc_pi0"  || *classification == "nc" || 
-                     *classification == "nc_pi0"     || ((*classification == "cosmic_nue" || *classification == "cosmic_nuebar") && passed_selection)  ) {
+                     *classification == "nc_pi0"     || ((*classification == "cosmic_nue" || *classification == "cosmic_nuebar" || 
+                     *classification == "thr_nue"    || *classification == "thr_nuebar") && passed_selection)  ) {
                     
                     // Fill histograms
-                    FillHists(label, uni, k_xsec_bkg, weight_uni, shr_energy_cali, elec_e);
-                    FillHists(label, uni, k_xsec_sel, cv_weight, shr_energy_cali, elec_e);  // Selected events (N term) we dont weight
+                    if (std::string(_util.xsecmode) != "txtlist"){
+
+
+                        FillHists(label, uni, k_xsec_bkg, weight_uni, recoX, trueX);
+                        FillHists(label, uni, k_xsec_sel, cv_weight, recoX, trueX);  // Selected events (N term) we dont weight
+                    
+                    }
+                    // Just save the event weights
+                    else {
+                        ev_weight.push_back(weight_uni);
+                    }
                     
                 }
 
@@ -179,37 +279,99 @@ void CrossSectionHelper::LoopEvents(){
                       *classification == "unmatched_nuebar" || *classification == "cosmic_nuebar") {
                     
                     // Fill histograms
-                    FillHists(label, uni, k_xsec_gen, weight_uni, shr_energy_cali, elec_e);
-
+                    if (std::string(_util.xsecmode) != "txtlist"){
+                        
+                        FillHists(label, uni, k_xsec_gen, weight_uni, recoX, trueX);
+                        FillHists(label, uni, k_xsec_gen_smear, weight_uni, recoX, trueX);
+                        FillHists(label, uni, k_xsec_gen_fine, weight_uni, recoX, trueX);
+                    
+                    }
+                    // Just save the event weights
+                    else {
+                        if (!passed_selection)
+                            ev_weight.push_back(weight_uni);
+                    }
                 }
                 
                 // Data event
                 if (*classification == "data"){
 
-                    if (cv_weight != 1.0) std::cout << "Error weight for data is not 1, this means your weighting the data... bad!"<< std::endl;
+                    if (cv_weight != 1.0 && !_util.isfakedata) std::cout << "Error weight for data is not 1, this means your weighting the data... bad!"<< std::endl;
+
+                    // If fake data, dont fill if we have a generated event!
+                    if (_util.isfakedata && !passed_selection)
+                        continue;
                     
                     // Fill histograms
-                    FillHists(label, uni, k_xsec_data, cv_weight, shr_energy_cali, elec_e);
+                    if (std::string(_util.xsecmode) != "txtlist"){
+                    
+                        FillHists(label, uni, k_xsec_data, cv_weight, recoX, trueX);
+
+                    }
+                    // Just save the event weights
+                    else {
+                        ev_weight.push_back(1.0);
+                    }
                 }
 
                 // Off beam event
                 if (*classification == "ext"){
                     
                     // Fill histograms
-                    FillHists(label, uni, k_xsec_ext, cv_weight, shr_energy_cali, elec_e);
+                    if (std::string(_util.xsecmode) != "txtlist"){
+                        
+                        FillHists(label, uni, k_xsec_ext, cv_weight, recoX, trueX);
+
+                        // Apply additional weight to the ext events to get the N selected number correct
+                        FillHists(label, uni, k_xsec_sel, cv_weight*(_util.ext_scale_factor / _util.mc_scale_factor), recoX, trueX);
+
+                    }
+                    // Just save the event weights
+                    else {
+                        ev_weight.push_back(cv_weight*(_util.ext_scale_factor / _util.mc_scale_factor));
+                    }
                 }
 
                 // Dirt event
                 if (*classification == "dirt"){
                     
                     // Fill histograms
-                    FillHists(label, uni, k_xsec_dirt, weight_dirt, shr_energy_cali, elec_e);
+                    if (std::string(_util.xsecmode) != "txtlist"){
+                        
+                        FillHists(label, uni, k_xsec_dirt, weight_dirt, recoX, trueX);
+
+                        // Apply additional weight to the dirt events to get the N selected number correct
+                        FillHists(label, uni, k_xsec_sel, cv_weight*(_util.dirt_scale_factor / _util.mc_scale_factor), recoX, trueX);
+                    }
+                    // Just save the event weights
+                    else {
+                        ev_weight.push_back(cv_weight*(_util.dirt_scale_factor / _util.mc_scale_factor));
+                    }
                 }
             } // End loop over uni
 
         } // End loop over labels
+
+        // Call the function to save the events and weights to a file
+        if (std::string(_util.xsecmode) == "txtlist"){
+            SaveEvent(*classification, passed_selection, ev_weight, recoX, trueX);
+        }
+
+        // Clear vector to store the weights
+        ev_weight.clear();
         
     } // End loop over events
+
+    // If we want to just write out the event numbers to a txt file
+    if (std::string(_util.xsecmode) == "txtlist"){
+        std::cout << "Writing out event list to text file..."<< std::endl;
+        f_out->cd();
+        event_tree->Write("", TObject::kOverwrite);
+        meta_tree ->Write("", TObject::kOverwrite);
+
+        return;
+    }
+
 
     std::cout << "\n\nFinished Event Loop, now calculating the cross-sections\n\n"<< std::endl;
 
@@ -236,7 +398,8 @@ void CrossSectionHelper::LoopEvents(){
                 double temp_integrated_flux = integrated_flux;
 
                 // If we are reweighting by the PPFX Multisims, we need to change the integrated flux too
-                if (reweighter_labels.at(label) == "weightsPPFX") temp_integrated_flux = GetIntegratedFlux(uni, "HP", "ppfx_ms_UBPPFX", reweighter_labels.at(label), nu_pdg, true_energy, numi_ang);
+                if (reweighter_labels.at(label) == "weightsPPFX") 
+                    temp_integrated_flux = GetIntegratedFluxHP(uni, "ppfx_ms_UBPPFX");
 
                 // If this is a beamline variation then we use the corresponding beamline flux
                 if (CheckBeamline(reweighter_labels.at(label))) {
@@ -251,8 +414,40 @@ void CrossSectionHelper::LoopEvents(){
                 if (reweighter_labels.at(label) == "POTup") weight_POT =1.0/1.02;
                 if (reweighter_labels.at(label) == "POTdn") weight_POT =1.0/0.98;
 
-                // Calculate the efficiency histogram -- this is incorrect, we need to smear the truth efficiency!
-                h_cross_sec.at(label).at(uni).at(var).at(k_xsec_eff)->Divide(h_cross_sec.at(label).at(uni).at(var).at(k_xsec_sig), h_cross_sec.at(label).at(uni).at(var).at(k_xsec_gen));
+                // Calculate the efficiency histogram with smearing of the truth
+                if (var == k_var_recoX){
+                    Smear(h_cross_sec.at(label).at(uni).at(k_var_trueX).at(k_xsec_sig), h_cross_sec.at(label).at(uni).at(k_var_trueX).at(k_xsec_gen),
+                          h_smear.at(label).at(uni).at(k_var_recoX), h_cross_sec.at(label).at(uni).at(k_var_recoX).at(k_xsec_eff));
+                }
+                // Calculate the efficiency histogram by dividing the sig and gen
+                else{ 
+                    h_cross_sec.at(label).at(uni).at(var).at(k_xsec_eff)->Divide(h_cross_sec.at(label).at(uni).at(var).at(k_xsec_sig), h_cross_sec.at(label).at(uni).at(var).at(k_xsec_gen));
+                }
+
+                // For the x-sec in true space, appy a response matrix to the generated events
+                if (var == k_var_trueX){
+                    
+                    // Use standard binning to smear
+                    if (std::string(_util.xsec_bin_mode) == "standard"){
+
+                        // Apply the response matrix to the detvar CV for detector variations
+                        if (_util.isvariation && std::string(_util.variation) != "CV"){
+                            
+                            ApplyResponseMatrix(h_cross_sec.at(label).at(uni).at(k_var_trueX).at(k_xsec_gen), h_cross_sec.at(label).at(uni).at(k_var_trueX).at(k_xsec_gen_smear),
+                            h_detvar_cv, h_smear.at(label).at(uni).at(k_var_trueX));
+                        }
+                        else {
+
+                            ApplyResponseMatrix(h_cross_sec.at(label).at(uni).at(k_var_trueX).at(k_xsec_gen), h_cross_sec.at(label).at(uni).at(k_var_trueX).at(k_xsec_gen_smear),
+                            h_cross_sec.front().front().at(k_var_trueX).at(k_xsec_gen), h_smear.at(label).at(uni).at(k_var_trueX));
+                        }
+                    }
+                    // Use Fine bins in truth to smear
+                    else {
+                        ApplyResponseMatrix(h_cross_sec.at(label).at(uni).at(k_var_trueX).at(k_xsec_gen_fine), h_cross_sec.at(label).at(uni).at(k_var_trueX).at(k_xsec_gen_smear),
+                        h_cross_sec.front().front().at(k_var_trueX).at(k_xsec_gen_fine), h_smear_fine.at(label).at(uni).at(k_var_trueX));
+                    }
+                }
 
                 // MC Cross section -- currently using eventrate
                 CalcCrossSecHist(h_cross_sec.at(label).at(uni).at(var).at(k_xsec_sel), // N Sel
@@ -265,22 +460,64 @@ void CrossSectionHelper::LoopEvents(){
                                 _util.dirt_scale_factor,
                                 h_cross_sec.at(label).at(uni).at(var).at(k_xsec_dirt), // N Dirt
                                 h_cross_sec.at(label).at(uni).at(var).at(k_xsec_mcxsec),
-                                 N_target_MC, "MC");
+                                h_cross_sec.at(label).at(uni).at(var).at(k_xsec_sig),  // N Sig
+                                 N_target_MC, "MC", var);
 
-                // Data Cross section -- currently using eventrate
-                CalcCrossSecHist(h_cross_sec.at(label).at(uni).at(var).at(k_xsec_data), // N Sel
-                                h_cross_sec.at(label).at(uni).at(var).at(k_xsec_eff),   // Eff
-                                h_cross_sec.at(label).at(uni).at(var).at(k_xsec_bkg),   // N Bkg
-                                _util.mc_scale_factor,
-                                weight_POT * temp_integrated_flux * data_flux_scale_factor, // Flux
-                                _util.ext_scale_factor,
-                                h_cross_sec.at(label).at(uni).at(var).at(k_xsec_ext),   // N EXT
-                                _util.dirt_scale_factor,
-                                h_cross_sec.at(label).at(uni).at(var).at(k_xsec_dirt),  // N Dirt
-                                h_cross_sec.at(label).at(uni).at(var).at(k_xsec_dataxsec),
-                                N_target_Data, "Data");
+                if (var != k_var_trueX){
+                    // Data Cross section -- currently using eventrate
+                    CalcCrossSecHist(h_cross_sec.at(label).at(uni).at(var).at(k_xsec_data), // N Sel
+                                    h_cross_sec.at(label).at(uni).at(var).at(k_xsec_eff),   // Eff
+                                    h_cross_sec.at(label).at(uni).at(var).at(k_xsec_bkg),   // N Bkg
+                                    _util.mc_scale_factor,
+                                    weight_POT * temp_integrated_flux * data_flux_scale_factor, // Flux
+                                    _util.ext_scale_factor,
+                                    h_cross_sec.at(label).at(uni).at(var).at(k_xsec_ext),   // N EXT
+                                    _util.dirt_scale_factor,
+                                    h_cross_sec.at(label).at(uni).at(var).at(k_xsec_dirt),  // N Dirt
+                                    h_cross_sec.at(label).at(uni).at(var).at(k_xsec_dataxsec),
+                                    h_cross_sec.at(label).at(uni).at(var).at(k_xsec_sig),   // N Sig
+                                    N_target_Data, "Data", var);
+                }
 
-            } // End loop over the vars
+                if (var == k_var_trueX){
+                    // Calculate the the smeared cross section prediction
+                    h_cross_sec.at(label).at(uni).at(k_var_trueX).at(k_xsec_mcxsec_smear)->Add(h_cross_sec.at(label).at(uni).at(k_var_trueX).at(k_xsec_gen_smear), 1);
+                    h_cross_sec.at(label).at(uni).at(k_var_trueX).at(k_xsec_mcxsec_smear)->Scale(1.0 / (integrated_flux * mc_flux_scale_factor * N_target_MC));
+                    h_cross_sec.at(label).at(uni).at(k_var_trueX).at(k_xsec_mcxsec_smear)->Scale(1.0e39);
+
+                    // Calculate the the fine truth cross section prediction
+                    h_cross_sec.at(label).at(uni).at(k_var_trueX).at(k_xsec_mcxsec_fine)->Add(h_cross_sec.at(label).at(uni).at(k_var_trueX).at(k_xsec_gen_fine), 1);
+                    h_cross_sec.at(label).at(uni).at(k_var_trueX).at(k_xsec_mcxsec_fine)->Scale(1.0 / (integrated_flux * mc_flux_scale_factor * N_target_MC));
+                    h_cross_sec.at(label).at(uni).at(k_var_trueX).at(k_xsec_mcxsec_fine)->Scale(1.0e39);
+
+                    // If the crosssec is a function of angle then scale again by a factor of 100
+                    if (std::string(_util.xsec_var) == "elec_ang"){
+                        h_cross_sec.at(label).at(uni).at(k_var_trueX).at(k_xsec_mcxsec_smear)->Scale(100);
+                        h_cross_sec.at(label).at(uni).at(k_var_trueX).at(k_xsec_mcxsec_fine)->Scale(100);
+                    }
+
+                }
+
+                // Scale the histograms to avoid working with really small numbers
+                h_cross_sec.at(label).at(uni).at(var).at(k_xsec_mcxsec)->Scale(1.0e39);
+                h_cross_sec.at(label).at(uni).at(var).at(k_xsec_dataxsec)->Scale(1.0e39);
+
+                // If the crosssec is a function of angle then scale again by a factor of 100
+                if (std::string(_util.xsec_var) == "elec_ang" && var != k_var_integrated){
+                    h_cross_sec.at(label).at(uni).at(var).at(k_xsec_mcxsec)->Scale(100);
+                    h_cross_sec.at(label).at(uni).at(var).at(k_xsec_dataxsec)->Scale(100);
+                }
+
+                if (var == k_var_trueX){
+                    UnregularizedUnfold(h_cross_sec.at(label).at(uni).at(k_var_recoX).at(k_xsec_dataxsec), h_cross_sec.at(label).at(uni).at(k_var_trueX).at(k_xsec_dataxsec),  h_smear.at(label).at(uni).at(k_var_trueX));
+                }
+
+
+                // if (var == 0) std::cout << reweighter_labels.at(label) << ": " << _util.red << h_cross_sec.at(label).at(uni).at(k_var_integrated).at(k_xsec_mcxsec)  ->Integral() << _util.reset<< " x10^-39 cm2/nucleon" << std::endl;
+
+            } // End loop over the _util.vars
+
+            
         
         } // End loop over universes
     
@@ -294,6 +531,7 @@ void CrossSectionHelper::LoopEvents(){
     "Signal MC:       " << h_cross_sec.at(0).at(0).at(k_var_integrated).at(k_xsec_sig) ->Integral() << "\n" << 
     "Background MC:   " << h_cross_sec.at(0).at(0).at(k_var_integrated).at(k_xsec_bkg) ->Integral() << "\n" << 
     "Generated MC:    " << h_cross_sec.at(0).at(0).at(k_var_integrated).at(k_xsec_gen) ->Integral() << "\n" << 
+    "Efficiency:      " << h_cross_sec.at(0).at(0).at(k_var_integrated).at(k_xsec_eff) ->Integral() << "\n" << 
     "EXT MC:          " << h_cross_sec.at(0).at(0).at(k_var_integrated).at(k_xsec_ext) ->Integral()* (_util.ext_scale_factor / _util.mc_scale_factor) << "\n" << 
     "Dirt MC:         " << h_cross_sec.at(0).at(0).at(k_var_integrated).at(k_xsec_dirt)->Integral()* (_util.dirt_scale_factor / _util.mc_scale_factor) << "\n\n" << 
     
@@ -305,11 +543,11 @@ void CrossSectionHelper::LoopEvents(){
     "Dirt Data:       " << h_cross_sec.at(0).at(0).at(k_var_integrated).at(k_xsec_dirt)->Integral()* _util.dirt_scale_factor << "\n"
     << std::endl;
 
-    std::cout << 
-    "MC Flux Norm. Event Rate: "   << h_cross_sec.at(0).at(0).at(k_var_integrated).at(k_xsec_mcxsec)  ->Integral() << " cm2" << "\n" << 
-    "Data Flux Norm. Event Rate: " << h_cross_sec.at(0).at(0).at(k_var_integrated).at(k_xsec_dataxsec)->Integral() << " cm2      \n"
+    std::cout <<
+    "GENIE X-Sec:           " << h_cross_sec.at(0).at(0).at(k_var_integrated).at(k_xsec_sig) ->Integral() / (h_cross_sec.at(0).at(0).at(k_var_integrated).at(k_xsec_eff)->Integral() *integrated_flux * mc_flux_scale_factor * N_target_MC) * 1.0e39 << " x10^-39 cm2/nucleon" << "\n" << 
+    "MC CC Cross Section:   " << h_cross_sec.at(0).at(0).at(k_var_integrated).at(k_xsec_mcxsec)  ->Integral() << " x10^-39 cm2/nucleon" << "\n" << 
+    "Data CC Cross Section: " << h_cross_sec.at(0).at(0).at(k_var_integrated).at(k_xsec_dataxsec)->Integral() << " x10^-39 cm2/nucleon      \n"
     << std::endl;
-
 
     // Write the histograms to file for inspection
     WriteHists();
@@ -325,20 +563,23 @@ void CrossSectionHelper::LoopEventsbyCut(){
     
     SliceContainer SC;
 
-    // Load in the TFile
-    TFile *f_mc;
+    int treeNumber = -1; // TTree number in TChain
+
+    // Create the TChain and add the MC and intrinsic events
+    TChain *in_chain = new TChain("nuselection/NeutrinoSelectionFilter");
+
+    // For now we need to keep the intrinsic file name in this format unless we add more options for configuration
+    if (std::string(_util.intrinsic_mode) == "intrinsic")
+        in_chain->Add(Form("../ntuples/neutrinoselection_filt_run%s_overlay_intrinsic_newtune.root", _util.run_period)); 
     
-    _util.GetFile(f_mc, _util.mc_file_name); // We need the MC file as an input argument
+    // Add the Main MC file
+    in_chain->Add(_util.mc_file_name);
 
-    // Initialise the TTree and Slice Container class
-    TTree *mc_tree;
-    _util.GetTree(f_mc, mc_tree, "nuselection/NeutrinoSelectionFilter");
-    SC.Initialise(mc_tree, _util.k_mc, _util);
-
-    int mc_tree_total_entries = mc_tree->GetEntries();
+    // Initialise the TChain and Slice Container class
+    SC.Initialise(in_chain, _util.k_mc, _util);
 
     // Event loop
-    for (int ievent = 0; ievent < mc_tree_total_entries; ievent++){
+    for (int ievent = 0; ievent < in_chain->GetEntries(); ++ievent){
 
         // See if we want to process all the events
         if (_util.num_events > 0){
@@ -349,10 +590,25 @@ void CrossSectionHelper::LoopEventsbyCut(){
         if (ievent % 100000 == 0) std::cout << "On entry " << ievent/100000.0 <<"00k " << std::endl;
 
         // Get the entry in the tree
-        mc_tree->GetEntry(ievent); 
+        in_chain->GetEntry(ievent);
+
+        // Print the TChain number
+        if(treeNumber != in_chain->GetTreeNumber()) {
+            treeNumber = in_chain->GetTreeNumber();
+            std::cout << "Moving to tree number " << treeNumber << "." << std::endl;
+            
+            // if there is more than one tree and its the second file, make sure the intrinsic mode is turned off
+            // otherwise we will apply the intrinsic weights to the bkg, this is not what we want
+            if (treeNumber == 1){
+                _util.TurnoffIntrinsicMode();
+            }
+
+            std::cout << "Intrinsic Mode is: " << std::string(_util.intrinsic_mode) << std::endl;
+
+        }
 
         // Apply the selection cuts and fill histograms for each universe
-        ApplyCuts(_util.k_mc, SC, _scuts);
+        ApplyCuts(_util.k_mc, SC, _scuts, treeNumber);
 
     }
 
@@ -361,18 +617,27 @@ void CrossSectionHelper::LoopEventsbyCut(){
 
 }
 // -----------------------------------------------------------------------------
-bool CrossSectionHelper::ApplyCuts(int type, SliceContainer &SC, SelectionCuts _scuts){
+bool CrossSectionHelper::ApplyCuts(int type, SliceContainer &SC, SelectionCuts _scuts, int treeNum){
 
     bool pass = true;
 
     // Set derived variables in the slice container
+    // Classify the event
+    SC.SliceClassifier(type);      // Classification of the event
+
+    // If we have a signal event that is below threshold, then set its category to thr_nue or thr_nuebar
+    SC.SetThresholdEvent(type);
+
     SC.SetSignal();                // Set the event as either signal or other
     SC.SetTrueElectronThetaPhi();  // Set the true electron theta and phi variables
     SC.SetNuMIAngularVariables();  // Set the NuMI angular variables
     SC.CalibrateShowerEnergy();    // Divide the shower energy by 0.83 so it is done in one place
+    SC.SetNonLdgShrEvent(type);    // If the backtracked pdg of the leading shower is not an electron
 
-    // Classify the event
-    SC.SliceClassifier(type);      // Classification of the event
+    // Skip signal events in the standard MC file so we dont double count the signal events
+    if (treeNum == 1 && SC.is_signal){
+        return false;
+    }
 
     // *************************************************************************
     // Unselected---------------------------------------------------------------
@@ -486,12 +751,12 @@ void CrossSectionHelper::FillCutHists(int type, SliceContainer &SC, std::pair<st
     for (unsigned int label = 0; label < reweighter_labels.size(); label++){
 
         // Call switch function
-        SwitchReweighterLabel(reweighter_labels.at(label), SC);
+        SwitchReweighterLabel(reweighter_labels[label], SC);
 
         bool is_in_fv = _util.in_fv(SC.true_nu_vtx_sce_x, SC.true_nu_vtx_sce_y, SC.true_nu_vtx_sce_z); // This variable is only used in the case of MC, so it should be fine 
 
         // Get the CV weight
-        double cv_weight = _util.GetCVWeight(type, SC.weightSplineTimesTune, SC.ppfx_cv, SC.nu_e, SC.nu_pdg, is_in_fv);
+        double cv_weight = _util.GetCVWeight(type, SC.weightSplineTimesTune, SC.ppfx_cv, SC.nu_e, SC.nu_pdg, is_in_fv, SC.interaction, SC.elec_e);
         _util.GetPiZeroWeight(cv_weight, _util.pi0_correction, SC.nu_pdg, SC.ccnc, SC.npi0, SC.pi0_e);
         
         double weight_dirt = cv_weight;
@@ -507,37 +772,45 @@ void CrossSectionHelper::FillCutHists(int type, SliceContainer &SC, std::pair<st
         for (unsigned int uni = 0; uni < vec_universes.size(); uni++){
 
             // Update the CV weight to CV * universe i
-            double weight_uni{1.0}; 
+            double weight_uni{cv_weight}; 
 
-            double _numi_ang = _util.GetNuMIAngle(SC.true_nu_px, SC.true_nu_py, SC.true_nu_pz, "beam");
-            SetUniverseWeight(reweighter_labels.at(label), weight_uni, weight_dirt, weight_ext, SC.weightSplineTimesTune, classification.first, cv_weight, uni, SC.nu_pdg, SC.nu_e, _numi_ang);
+            SetUniverseWeight(reweighter_labels[label], weight_uni, weight_dirt, SC.weightSplineTimesTune, classification.first, cv_weight, uni, SC.nu_pdg, SC.nu_e, SC.nu_angle, SC.npi0, SC.pi0_e);
 
             double dedx_max = SC.GetdEdxMax();
 
             // Now we got the weight for universe i, lets fill the histograms :D
-            h_cut_v.at(label).at(cut_index).at(_util.k_cut_softwaretrig).at(uni)             ->Fill(SC.swtrig,                 weight_uni);
-            h_cut_v.at(label).at(cut_index).at(_util.k_cut_nslice).at(uni)                   ->Fill(SC.nslice,                 weight_uni);
-            h_cut_v.at(label).at(cut_index).at(_util.k_cut_shower_multiplicity).at(uni)      ->Fill(SC.n_showers,              weight_uni);
-            h_cut_v.at(label).at(cut_index).at(_util.k_cut_track_multiplicity).at(uni)       ->Fill(SC.n_tracks,               weight_uni);
-            h_cut_v.at(label).at(cut_index).at(_util.k_cut_topological_score).at(uni)        ->Fill(SC.topological_score,      weight_uni);
-            h_cut_v.at(label).at(cut_index).at(_util.k_cut_vtx_x_sce).at(uni)                ->Fill(SC.reco_nu_vtx_sce_x,      weight_uni);
-            h_cut_v.at(label).at(cut_index).at(_util.k_cut_vtx_y_sce).at(uni)                ->Fill(SC.reco_nu_vtx_sce_y,      weight_uni);
-            h_cut_v.at(label).at(cut_index).at(_util.k_cut_vtx_z_sce).at(uni)                ->Fill(SC.reco_nu_vtx_sce_z,      weight_uni);
-            h_cut_v.at(label).at(cut_index).at(_util.k_cut_shower_score).at(uni)             ->Fill(SC.shr_score,              weight_uni);
-            h_cut_v.at(label).at(cut_index).at(_util.k_cut_shr_tkfit_dedx_max).at(uni)       ->Fill(dedx_max, weight_uni);
-            if (SC.n_tracks > 0)  h_cut_v.at(label).at(cut_index).at(_util.k_cut_shr_tkfit_dedx_max_with_tracks).at(uni)    ->Fill(dedx_max, weight_uni);
-            if (SC.n_tracks == 0) h_cut_v.at(label).at(cut_index).at(_util.k_cut_shr_tkfit_dedx_max_no_tracks).at(uni)      ->Fill(dedx_max, weight_uni);
-            h_cut_v.at(label).at(cut_index).at(_util.k_cut_shower_to_vtx_dist).at(uni)       ->Fill(SC.shr_distance,           weight_uni);
-            h_cut_v.at(label).at(cut_index).at(_util.k_cut_hits_ratio).at(uni)               ->Fill(SC.hits_ratio,             weight_uni);
-            h_cut_v.at(label).at(cut_index).at(_util.k_cut_CosmicIPAll3D).at(uni)            ->Fill(SC.CosmicIPAll3D,          weight_uni);
-            h_cut_v.at(label).at(cut_index).at(_util.k_cut_contained_fraction).at(uni)       ->Fill(SC.contained_fraction,     weight_uni);
-            h_cut_v.at(label).at(cut_index).at(_util.k_cut_shrmoliereavg).at(uni)            ->Fill(SC.shrmoliereavg,          weight_uni);
-            h_cut_v.at(label).at(cut_index).at(_util.k_cut_leading_shower_theta).at(uni)     ->Fill(SC.shr_theta * 180/3.14159,weight_uni);
-            h_cut_v.at(label).at(cut_index).at(_util.k_cut_leading_shower_phi).at(uni)       ->Fill(SC.shr_phi * 180/3.14159,  weight_uni);
-            h_cut_v.at(label).at(cut_index).at(_util.k_cut_shower_energy_cali).at(uni)       ->Fill(SC.shr_energy_cali,   weight_uni);
-            h_cut_v.at(label).at(cut_index).at(_util.k_cut_shower_energy_cali_rebin).at(uni) ->Fill(SC.shr_energy_cali,   weight_uni);
-            h_cut_v.at(label).at(cut_index).at(_util.k_cut_flash_time).at(uni)               ->Fill(SC.flash_time,   weight_uni);
-            h_cut_v.at(label).at(cut_index).at(_util.k_cut_flash_pe).at(uni)                 ->Fill(SC.flash_pe,   weight_uni);
+            // Use [] rather than .at() to speed this process up. This can cause errors if indexes go out of bound
+            h_cut_v[label][cut_index][_util.k_cut_nslice][uni]                   ->Fill(SC.nslice,                 weight_uni);
+            h_cut_v[label][cut_index][_util.k_cut_shower_multiplicity][uni]      ->Fill(SC.n_showers,              weight_uni);
+            h_cut_v[label][cut_index][_util.k_cut_track_multiplicity][uni]       ->Fill(SC.n_tracks,               weight_uni);
+            h_cut_v[label][cut_index][_util.k_cut_topological_score][uni]        ->Fill(SC.topological_score,      weight_uni);
+            h_cut_v[label][cut_index][_util.k_cut_vtx_x_sce][uni]                ->Fill(SC.reco_nu_vtx_sce_x,      weight_uni);
+            h_cut_v[label][cut_index][_util.k_cut_vtx_y_sce][uni]                ->Fill(SC.reco_nu_vtx_sce_y,      weight_uni);
+            h_cut_v[label][cut_index][_util.k_cut_vtx_z_sce][uni]                ->Fill(SC.reco_nu_vtx_sce_z,      weight_uni);
+            h_cut_v[label][cut_index][_util.k_cut_shower_score][uni]             ->Fill(SC.shr_score,              weight_uni);
+            h_cut_v[label][cut_index][_util.k_cut_shr_tkfit_dedx_max][uni]       ->Fill(dedx_max, weight_uni);
+            
+            if (SC.n_tracks > 0)
+                h_cut_v[label][cut_index][_util.k_cut_shr_tkfit_dedx_max_with_tracks][uni]    ->Fill(dedx_max, weight_uni);
+            
+            if (SC.n_tracks == 0)
+                h_cut_v[label][cut_index][_util.k_cut_shr_tkfit_dedx_max_no_tracks][uni]      ->Fill(dedx_max, weight_uni);
+            
+            h_cut_v[label][cut_index][_util.k_cut_shower_to_vtx_dist][uni]       ->Fill(SC.shr_distance,           weight_uni);
+            h_cut_v[label][cut_index][_util.k_cut_hits_ratio][uni]               ->Fill(SC.hits_ratio,             weight_uni);
+            h_cut_v[label][cut_index][_util.k_cut_CosmicIPAll3D][uni]            ->Fill(SC.CosmicIPAll3D,          weight_uni);
+            h_cut_v[label][cut_index][_util.k_cut_contained_fraction][uni]       ->Fill(SC.contained_fraction,     weight_uni);
+            h_cut_v[label][cut_index][_util.k_cut_shrmoliereavg][uni]            ->Fill(SC.shrmoliereavg,          weight_uni);
+            h_cut_v[label][cut_index][_util.k_cut_leading_shower_theta][uni]     ->Fill(SC.shr_theta * 180/3.14159,weight_uni);
+            h_cut_v[label][cut_index][_util.k_cut_leading_shower_phi][uni]       ->Fill(SC.shr_phi * 180/3.14159,  weight_uni);
+            h_cut_v[label][cut_index][_util.k_cut_shower_energy_cali][uni]       ->Fill(SC.shr_energy_cali,        weight_uni);
+            h_cut_v[label][cut_index][_util.k_cut_shower_energy_cali_rebin][uni] ->Fill(SC.shr_energy_cali,        weight_uni);
+            h_cut_v[label][cut_index][_util.k_cut_flash_time][uni]               ->Fill(SC.flash_time,             weight_uni);
+            h_cut_v[label][cut_index][_util.k_cut_flash_pe][uni]                 ->Fill(SC.flash_pe,               weight_uni);
+            h_cut_v[label][cut_index][_util.k_cut_effective_angle][uni]          ->Fill(SC.effective_angle,        weight_uni);
+            h_cut_v[label][cut_index][_util.k_cut_effective_cosangle][uni]       ->Fill(SC.cos_effective_angle,    weight_uni);
+            h_cut_v[label][cut_index][_util.k_cut_effective_angle_rebin][uni]          ->Fill(SC.effective_angle,        weight_uni);
+            h_cut_v[label][cut_index][_util.k_cut_effective_cosangle_rebin][uni]       ->Fill(SC.cos_effective_angle,    weight_uni);
         
         }
 
@@ -547,14 +820,36 @@ void CrossSectionHelper::FillCutHists(int type, SliceContainer &SC, std::pair<st
 
 }
 // -----------------------------------------------------------------------------
-void CrossSectionHelper::SetUniverseWeight(std::string label, double &weight_uni, double &weight_dirt, double &weight_ext,  double _weightSplineTimesTune, std::string _classification, double cv_weight, int uni, int _nu_pdg, double _true_energy, double _numi_ang ){
+void CrossSectionHelper::SetUniverseWeight(std::string label, double &weight_uni, double &weight_dirt, double _weightSplineTimesTune,
+                                           std::string _classification, double cv_weight, int uni, int _nu_pdg, double _true_energy, double _numi_ang, int _npi0, double _pi0_e ){
 
     // Weight equal to universe weight times cv weight
-    if (label == "weightsReint" || label == "weightsPPFX" || label == "CV" ){
+    if (label == "weightsReint" || label == "CV" || label == "xsr_scc_Fv3up" || label == "xsr_scc_Fa3up" || label == "xsr_scc_Fv3dn" || label == "xsr_scc_Fa3dn"){
         
-        _util.CheckWeight(vec_universes.at(uni));
+        _util.CheckWeight(vec_universes[uni]);
 
-        weight_uni = cv_weight * vec_universes.at(uni);
+        weight_uni = cv_weight * vec_universes[uni];
+    }
+    // Hadron Production weights
+    else if (label == "weightsPPFX"){
+
+        // Get weight from ratio of flux histograms
+        if (_util.usefluggflux){
+            weight_uni = cv_weight * GetHPWeight(uni, "ppfx_ms_UBPPFX", _nu_pdg,  _true_energy, _numi_ang);
+
+            if (std::isnan(weight_uni) == 1 || std::isinf(weight_uni) || weight_uni < 0 || weight_uni > 30 || weight_uni == 1.0) {
+                 weight_uni = cv_weight;
+            }
+
+        }
+        // Get weight from the art-root event
+        else {
+
+            _util.CheckWeight(vec_universes[uni]);
+
+            weight_uni = cv_weight * vec_universes[uni];
+        }
+
     }
     // This is a mc stats variation which studies the statisitcal uncertainty on the smearing matrix and efficiency by 
     // varying the signal and generated events
@@ -567,18 +862,23 @@ void CrossSectionHelper::SetUniverseWeight(std::string label, double &weight_uni
             weight_uni = cv_weight * PoissonRandomNumber(uni);
         
         }
-        else weight_uni = cv_weight;
+        else
+            weight_uni = cv_weight;
         
     }
     // This is a beamline variation
     else if (CheckBeamline(label)){
-        weight_uni = cv_weight * GetIntegratedFlux(0, "", "", label, _nu_pdg, _true_energy, _numi_ang);
-        // std::cout << GetIntegratedFlux(0, "", "", label, _nu_pdg, _true_energy, _numi_ang) << std::endl;
+        weight_uni = cv_weight * GetBeamlineWeight(label, _nu_pdg, _true_energy, _numi_ang);
+        // std::cout << GetBeamlineWeight(label, _nu_pdg, _true_energy, _numi_ang) << std::endl;
     }
     // Dirt reweighting
     else if ( label == "Dirtup" || label == "Dirtdn"){
-        if (label == "Dirtup") weight_dirt = cv_weight*2.0; // increase the dirt by 100%
-        else weight_dirt = cv_weight*0.0; // decrease the dirt by 100%
+        
+        if (label == "Dirtup")
+            weight_dirt = cv_weight*1.25; // increase the dirt by 25%
+        else
+            weight_dirt = cv_weight*0.75; // decrease the dirt by 25%
+        
         weight_uni = cv_weight;
     }
     // POT Counting
@@ -586,27 +886,65 @@ void CrossSectionHelper::SetUniverseWeight(std::string label, double &weight_uni
         weight_uni  = cv_weight;
         weight_dirt = cv_weight;
     }
+    // Pi0 Tune -- This undoes the pi0 tune to see what effect it has
+    else if ( label == "pi0"){
+
+        // Fix the normalisation
+        if (_util.pi0_correction == 1){
+            
+            if (_npi0 > 0) {
+                weight_uni = cv_weight * 0.91; 
+            }
+            else {
+                weight_uni = cv_weight;
+            }
+
+        }
+        // Try energy dependent scaling for pi0
+        else if (_util.pi0_correction == 2){
+            
+            if (_npi0 > 0) {
+                double pi0emax = 0.6;
+                if (_pi0_e > 0.1 && _pi0_e < pi0emax){
+                    weight_uni = cv_weight / (1 - 0.4 * pi0_e);
+                }
+                else if (_pi0_e > 0.1 && _pi0_e >= pi0emax){
+                    weight_uni = cv_weight / (1 - 0.4 * pi0emax);
+                }    
+                else {
+                    weight_uni = cv_weight;
+                }            
+            }
+        }
+        else {
+            // Dont touch the weight
+            weight_uni = cv_weight;
+        }
+    }
     // If we are using the genie systematics and unisim systematics then we want to undo the genie tune on them so we dont double count
     else {
         // Note we actually dont want to divide out by the spline, but since this is 1 in numi, it doesnt matter!
         // We do this because the interaction systematics are shifted about the genie tune as the CV
 
+        // Dont weight the pi0s since we constrain them
+        if (_npi0 > 0) {
+            weight_uni = cv_weight;
+            return;
+        }
+
         // Check the spline times tune weight
         _util.CheckWeight(_weightSplineTimesTune);
 
-        // Check the uiverse weight
-        if (std::isnan(vec_universes.at(uni)) == 1 || std::isinf(vec_universes.at(uni)) || vec_universes.at(uni) < 0 || vec_universes.at(uni) > 30) {
+        // Check the uiverse weight -- Also need to set weights equal to 1.0 to the tune weight. Othwerwise we will introduce a bias when we divide this universe weight by the tune weight below.
+        if (std::isnan(vec_universes[uni]) == 1 || std::isinf(vec_universes[uni]) || vec_universes[uni] < 0 || vec_universes[uni] > 30 || vec_universes[uni] == 1.0) {
             
             // We set the universe to be the spline times tune, so it cancels with the divide below to just return the CV weight
             // i.e. a universe weight of 1
             vec_universes.at(uni)   = _weightSplineTimesTune;
         }
 
-        if (_weightSplineTimesTune == 0) weight_uni = 0.0; // Special case where the genie tune or we have thresholded events are zero
-        else weight_uni = (cv_weight * vec_universes.at(uni)) / _weightSplineTimesTune;
-
-        // std::cout << vec_universes.at(uni) << " " << weight_uni << "   "<< weightSplineTimesTune<< std::endl;
-
+        if (_weightSplineTimesTune == 0) weight_uni = cv_weight; // Special case where the genie tune or we have thresholded events are zero
+        else weight_uni = (cv_weight * vec_universes[uni]) / _weightSplineTimesTune;
     }
 
 }
@@ -632,7 +970,7 @@ double CrossSectionHelper::CalcCrossSec(double sel, double gen, double sig, doub
 
 }
 // -----------------------------------------------------------------------------
-void CrossSectionHelper::CalcCrossSecHist(TH1D* h_sel, TH1D* h_eff, TH1D* h_bkg, double mc_scale_factor, double flux, double ext_scale_factor, TH1D* h_ext, double dirt_scale_factor ,TH1D* h_dirt, TH1D* h_xsec, double targ, std::string mcdata){
+void CrossSectionHelper::CalcCrossSecHist(TH1D* h_sel, TH1D* h_eff, TH1D* h_bkg, double mc_scale_factor, double flux, double ext_scale_factor, TH1D* h_ext, double dirt_scale_factor ,TH1D* h_dirt, TH1D* h_xsec, TH1D* h_sig, double targ, std::string mcdata, int _var){
 
 
     // I think this is the slow bit -- maybe make copies only once?
@@ -656,122 +994,304 @@ void CrossSectionHelper::CalcCrossSecHist(TH1D* h_sel, TH1D* h_eff, TH1D* h_bkg,
 
     // (N - B) / (eff * targ * flux)
     h_xsec->Sumw2();
-    h_xsec->Add(h_sel,         1);
-    h_xsec->Add(h_bkg_clone,  -1);
-    h_xsec->Add(h_ext_clone,  -1);
-    h_xsec->Add(h_dirt_clone, -1);
     
-    // h_xsec->Divide(h_eff) ; // For flux normalised event rate we dont do anything to the efficiency
+    if (_var == k_var_trueX){
+        h_xsec->Add(h_sig,         1);
+    }
+    else {
+        h_xsec->Add(h_sel,         1);
+    }
+    
+    // Subtract the backgrounds
+    if (_var != k_var_trueX){
+        h_xsec->Add(h_bkg_clone,  -1);
+        h_xsec->Add(h_ext_clone,  -1);
+        h_xsec->Add(h_dirt_clone, -1);
+    }
+    
+    // If using Marco's Method we correct by the efficiency
+    if (std::string(_util.xsec_smear_mode) == "mcc8" || _var == k_var_integrated || _var == k_var_trueX){
+        h_xsec->Divide(h_eff) ;
+    }
 
     h_xsec->Scale(1.0 / (targ*flux) );
 
 }
 // -----------------------------------------------------------------------------
-double CrossSectionHelper::GetIntegratedFlux(int uni, std::string value, std::string label, std::string variation, int _nu_pdg, double _true_energy, double _numi_ang){
+double CrossSectionHelper::GetIntegratedFluxCV(){
 
     f_flux->cd();
 
     TH2D* h_nue, *h_nuebar;
+
+    double xbin;
+    double POT_flux{0.0}; // The POT of the flux file (i.e the POT used in the flux histogram)
+    double xbin_th{0.0};
+    double integral_nue{0.0}, integral_nuebar{0.0};
+    bool boolhist;
+
+    // Get the nue flux histogram from the file
+    boolhist = _util.GetHist(f_flux, h_nue,         "nue/Detsmear/nue_CV_AV_TPC_2D");       
+    if (boolhist == false) gSystem->Exit(0); 
+    
+    // Get the nuebar flux histogram from the file
+    boolhist      = _util.GetHist(f_flux, h_nuebar, "nuebar/Detsmear/nuebar_CV_AV_TPC_2D");
+    if (boolhist == false) gSystem->Exit(0); 
+
+    // Get the POT from the flux histogram
+    POT_flux = GetPOT(f_flux);
+
+    // Nue Integrated Flux
+    xbin_th = h_nue->GetXaxis()->FindBin(_util.energy_threshold);                     // Find the x bin to integrate from
+    integral_nue = h_nue->Integral( xbin_th, h_nue->GetNbinsX()+1, 0, h_nue->GetNbinsY()+1); // Integrate over the flux for nue
+    std::cout << "\nIntegral Nue Flux: " << flux_scale_factor * integral_nue / POT_flux << " nue / POT / cm2" << std::endl;
+
+    // Nuebar Integrated Flux
+    xbin_th   = h_nuebar->GetXaxis()->FindBin(_util.energy_threshold);                                   // Find the x bin to integrate from
+    integral_nuebar = h_nuebar->Integral( xbin_th, h_nuebar->GetNbinsX()+1, 0, h_nuebar->GetNbinsY()+1); // Integrate over the flux for nue
+    std::cout << "\nIntegral Nuebar Flux: " << flux_scale_factor * integral_nuebar / POT_flux << " nuebar / POT / cm2" << "\n" << std::endl;
+
+    // Print the flux scaled to the MC and Data POT
+    std::cout << "Integral Flux MC POT: "   << mc_flux_scale_factor * (integral_nue + integral_nuebar) / POT_flux   << " nu / MC POT / cm2"   << "\n" << std::endl;
+    std::cout << "Integral Flux Data POT: " << data_flux_scale_factor * (integral_nue + integral_nuebar) / POT_flux << " nu / Data POT / cm2" << "\n" << std::endl;
+
+    // Return the flux per POT
+    return (integral_nue + integral_nuebar) / POT_flux;
+
+
+}
+// -----------------------------------------------------------------------------
+double CrossSectionHelper::GetIntegratedFluxFLUGG(){
+
+    std::cout << "\n\n"<< "Printing Flux values from FLUGG flux file" << std::endl; 
+
+    TFile *f_flugg = TFile::Open("Systematics/MCC8_FHC_flux.root");
+
+    TH1D* h_nue, *h_nuebar;
+
+    double xbin;
+    double POT_flux{0.0}; // The POT of the flux file (i.e the POT used in the flux histogram)
+    double xbin_th{0.0};
+    double integral_nue{0.0}, integral_nuebar{0.0};
+    bool boolhist;
+
+    // Get the nue flux histogram from the file
+    boolhist = _util.GetHist(f_flugg, h_nue,         "nueFluxHisto");       
+    if (boolhist == false) gSystem->Exit(0); 
+    
+    // Get the nuebar flux histogram from the file
+    boolhist      = _util.GetHist(f_flugg, h_nuebar, "anueFluxHisto");
+    if (boolhist == false) gSystem->Exit(0); 
+
+    // Get the POT from the flux histogram
+    POT_flux = 2.4e20;
+
+    // Nue Integrated Flux
+    xbin_th = h_nue->GetXaxis()->FindBin(_util.energy_threshold);                     // Find the x bin to integrate from
+    integral_nue = h_nue->Integral( xbin_th, h_nue->GetNbinsX()+1); // Integrate over the flux for nue
+    std::cout << "\nIntegral Nue Flux: " <<  integral_nue / POT_flux << " nue / POT / cm2" << std::endl;
+
+    // Nuebar Integrated Flux
+    xbin_th   = h_nuebar->GetXaxis()->FindBin(_util.energy_threshold);                                   // Find the x bin to integrate from
+    integral_nuebar = h_nuebar->Integral( xbin_th, h_nuebar->GetNbinsX()+1); // Integrate over the flux for nue
+    std::cout << "\nIntegral Nuebar Flux: " << integral_nuebar / POT_flux<< " nuebar / POT / cm2" << "\n" << std::endl;
+
+    // Print the flux scaled to the MC and Data POT
+    std::cout << "Integral Flux MC POT: "   << mc_flux_scale_factor * integral_nuebar / (POT_flux * flux_scale_factor)   << " nu / MC POT / cm2"   << "\n" << std::endl;
+    std::cout << "Integral Flux Data POT: " << data_flux_scale_factor * integral_nuebar / (POT_flux * flux_scale_factor) << " nu / Data POT / cm2" << "\n" << std::endl;
+
+    // Return the flux per POT
+    return (integral_nue + integral_nuebar) / (POT_flux * flux_scale_factor);
+
+    f_flugg->Close();
+
+    f_flux->cd();
+
+
+}
+// -----------------------------------------------------------------------------
+double CrossSectionHelper::GetIntegratedFluxHP(int uni, std::string label){
+
+    f_flux->cd();
+
     TH2D *h_uni_nue, *h_uni_nuebar;
-    double weight = {1.0};
     double xbin, ybin;
     double POT_flux{0.0}; // The POT of the flux file (i.e the POT used in the flux histogram)
     double xbin_th{0.0};
     double integral_nue{0.0}, integral_nuebar{0.0};
-    bool boolfile, boolhist;
+    bool boolhist;
     
-    // Get the CV flux from the 5MeV binned histograms
-    if (value == "CV"){
+    // Get the POT from the file
+    POT_flux = GetPOT(f_flux);
 
-        // Get the nue flux histogram from the file
+    // Get Nue histogram
+    boolhist = _util.GetHist(f_flux, h_uni_nue, Form("nue/Multisims/nue_%s_Uni_%i_AV_TPC_2D", label.c_str(), uni));
+    if (boolhist == false) gSystem->Exit(0);
+    
+    // Get Nuebar histogram
+    boolhist = _util.GetHist(f_flux, h_uni_nuebar, Form("nuebar/Multisims/nuebar_%s_Uni_%i_AV_TPC_2D", label.c_str(), uni));
+    if (boolhist == false) gSystem->Exit(0);
+
+    // Integrate the Nue flux histogram
+    xbin_th = h_uni_nue->GetXaxis()->FindBin(_util.energy_threshold);                                    // Find the x bin to integrate from
+    integral_nue = h_uni_nue->Integral( xbin_th, h_uni_nue->GetNbinsX()+1, 0, h_uni_nue->GetNbinsY()+1); // Integrate over the flux for nue
+    // std::cout << "\nIntegral Nue Flux: " << flux_scale_factor * integral_nue / POT_flux << " nue / POT / GeV / cm2" << std::endl;
+
+    // Integrate the Nuebar flux histogram
+    xbin_th   = h_uni_nuebar->GetXaxis()->FindBin(_util.energy_threshold);                                           // Find the x bin to integrate from 
+    integral_nuebar = h_uni_nuebar->Integral( xbin_th, h_uni_nuebar->GetNbinsX()+1, 0, h_uni_nuebar->GetNbinsY()+1); // Integrate over the flux for nuebar
+    // std::cout << "Integral Nuebar Flux: " << flux_scale_factor * integral_nuebar / POT_flux << " nuebar / POT / GeV / cm2" << "\n" << std::endl;
+
+    // Return the flux per POT
+    return (integral_nue + integral_nuebar) / POT_flux;
+
+}
+// -----------------------------------------------------------------------------
+double CrossSectionHelper::GetBeamlineWeight(std::string variation, int _nu_pdg, double _true_energy, double _numi_ang){
+
+    f_flux->cd();
+
+    // double weight = {1.0};
+    double xbin, ybin;
+    double xbin_th{0.0};
+    
+    // Get the beamline variation index so we can get the right histogram to weight from
+    int var_index = GetBeamlineIndex(variation);
+
+    // Nue
+    if (_nu_pdg == 12){
+        xbin = beamline_hists.at(var_index).at(k_nue)->GetXaxis()->FindBin(_true_energy);
+        ybin = beamline_hists.at(var_index).at(k_nue)->GetYaxis()->FindBin(_numi_ang);
+        return ( beamline_hists.at(var_index).at(k_nue)->GetBinContent(xbin, ybin));
+    }
+    // Nuebar
+    else if (_nu_pdg == -12){
+        xbin = beamline_hists.at(var_index).at(k_nuebar)->GetXaxis()->FindBin(_true_energy);
+        ybin = beamline_hists.at(var_index).at(k_nuebar)->GetYaxis()->FindBin(_numi_ang);
+        return ( beamline_hists.at(var_index).at(k_nuebar)->GetBinContent(xbin, ybin));
+    }
+    // Numu
+    else if (_nu_pdg == 14){
+        xbin = beamline_hists.at(var_index).at(k_numu)->GetXaxis()->FindBin(_true_energy);
+        ybin = beamline_hists.at(var_index).at(k_numu)->GetYaxis()->FindBin(_numi_ang);
+        return ( beamline_hists.at(var_index).at(k_numu)->GetBinContent(xbin, ybin));
+    }
+    // NumuBar
+    else if (_nu_pdg == -14){
+        xbin = beamline_hists.at(var_index).at(k_numubar)->GetXaxis()->FindBin(_true_energy);
+        ybin = beamline_hists.at(var_index).at(k_numubar)->GetYaxis()->FindBin(_numi_ang);
+        return ( beamline_hists.at(var_index).at(k_numubar)->GetBinContent(xbin, ybin));
+    }
+    else return 1.0;
+
+
+}
+// -----------------------------------------------------------------------------
+double CrossSectionHelper::GetHPWeight(int uni, std::string label, int _nu_pdg, double _true_energy, double _numi_ang){
+
+    f_flux->cd();
+
+    TH2D *h_nue, *h_nuebar ,*h_uni_nue, *h_uni_nuebar;
+    TH2D *h_numu, *h_numubar, *h_uni_numu, *h_uni_numubar;
+    double xbin, ybin;
+    double xbinCV, ybinCV;
+    double POT_flux{0.0}; // The POT of the flux file (i.e the POT used in the flux histogram)
+    double xbin_th{0.0};
+    double integral_nue{0.0}, integral_nuebar{0.0};
+    double ratio{1.0};
+    bool boolhist;
+    
+    // Get the POT from the file
+    POT_flux = GetPOT(f_flux);
+
+  
+    // Nue
+    if (_nu_pdg == 12){
+
+        // Get Nue histogram
+        boolhist = _util.GetHist(f_flux, h_uni_nue, Form("nue/Multisims/nue_%s_Uni_%i_AV_TPC_2D", label.c_str(), uni));
+        if (boolhist == false) gSystem->Exit(0);
+    
+        xbin = h_uni_nue->GetXaxis()->FindBin(_true_energy);
+        ybin = h_uni_nue->GetYaxis()->FindBin(_numi_ang);
+        ratio = h_uni_nue->GetBinContent(xbin, ybin);
+        
+        // Get the nue flux histogram from the file CV
         boolhist = _util.GetHist(f_flux, h_nue,         "nue/Detsmear/nue_CV_AV_TPC_2D");       
         if (boolhist == false) gSystem->Exit(0); 
-        
-        // Get the nuebar flux histogram from the file
-        boolhist      = _util.GetHist(f_flux, h_nuebar, "nuebar/Detsmear/nuebar_CV_AV_TPC_2D");
-        if (boolhist == false) gSystem->Exit(0); 
 
-        std::cout << "Using Energy Threshold of: \033[0;31m" << energy_threshold * 1000 << " MeV" << "\033[0m" <<  std::endl;
+        xbinCV = h_nue->GetXaxis()->FindBin(_true_energy);
+        ybinCV = h_nue->GetYaxis()->FindBin(_numi_ang);
+        ratio /= h_nue->GetBinContent(xbin, ybin);
 
-        POT_flux = GetPOT(f_flux);
-
-        double xbin_th = h_nue->GetXaxis()->FindBin(energy_threshold);   // find the x bin to integrate from
-        integral_nue = h_nue->Integral( xbin_th, h_nue->GetNbinsX()+1, 0, h_nue->GetNbinsY()+1); // Integrate over the flux for nue
-
-        std::cout << "\nIntegral Nue Flux: " << flux_scale_factor * integral_nue / POT_flux << " nue / POT / GeV / cm2" << std::endl;
-
-        xbin_th   = h_nuebar->GetXaxis()->FindBin(energy_threshold);              // find the x bin to integrate from
-        integral_nuebar = h_nuebar->Integral( xbin_th, h_nuebar->GetNbinsX()+1, 0, h_nuebar->GetNbinsY()+1); // Integrate over the flux for nue
-
-        std::cout << "\nIntegral Nuebar Flux: " << flux_scale_factor * integral_nuebar / POT_flux << " nuebar / POT / GeV / cm2" << "\n" << std::endl;
-
-        // Return the flux per POT
-        return (integral_nue + integral_nuebar) / POT_flux;
-
+        return (ratio);
     }
-    // Will return the integrated nue+nuebar flux for universe i
-    else if (value == "HP"){
-
-        // Get the POT from the file
-        POT_flux = GetPOT(f_flux);
-
-        boolhist = _util.GetHist(f_flux, h_uni_nue, Form("nue/Multisims/nue_%s_Uni_%i_AV_TPC_2D", label.c_str(), uni));
-
-        if (boolhist == false) gSystem->Exit(0);
+    // Nuebar
+    else if (_nu_pdg == -12){
         
+        // Get Nuebar histogram
         boolhist = _util.GetHist(f_flux, h_uni_nuebar, Form("nuebar/Multisims/nuebar_%s_Uni_%i_AV_TPC_2D", label.c_str(), uni));
         if (boolhist == false) gSystem->Exit(0);
-
-        xbin_th = h_uni_nue->GetXaxis()->FindBin(energy_threshold);   // find the x bin to integrate from
-        integral_nue = h_uni_nue->Integral( xbin_th, h_uni_nue->GetNbinsX()+1, 0, h_uni_nue->GetNbinsY()+1); // Integrate over the flux for nue
-
-        // std::cout << xbin_th << std::endl;
-
-        // std::cout << "\nIntegral Nue Flux: " << flux_scale_factor * integral_nue / POT_flux << " nue / POT / GeV / cm2" << std::endl;
-
-        xbin_th   = h_uni_nuebar->GetXaxis()->FindBin(energy_threshold);              // find the x bin to integrate from 
-        integral_nuebar = h_uni_nuebar->Integral( xbin_th, h_uni_nuebar->GetNbinsX()+1, 0, h_uni_nuebar->GetNbinsY()+1); // Integrate over the flux for nuebar
-
-        // std::cout << "Integral Nuebar Flux: " << flux_scale_factor * integral_nuebar / POT_flux << " nuebar / POT / GeV / cm2" << "\n" << std::endl;
-
-        // Return the flux per POT
-        return (integral_nue + integral_nuebar) / POT_flux;
-
-    }
     
-    // Return a weight based on the energy and angle of the event -- used for weighting by beamline variations and ppfx HP types broken down 
-    else {
+        xbin = h_uni_nuebar->GetXaxis()->FindBin(_true_energy);
+        ybin = h_uni_nuebar->GetYaxis()->FindBin(_numi_ang);
+        ratio = h_uni_nuebar->GetBinContent(xbin, ybin);
+        
+        // Get the nuebar flux histogram from the file CV
+        boolhist = _util.GetHist(f_flux, h_nuebar,         "nuebar/Detsmear/nuebar_CV_AV_TPC_2D");       
+        if (boolhist == false) gSystem->Exit(0); 
 
-        int var_index = GetBeamlineIndex(variation);
+        xbinCV = h_nuebar->GetXaxis()->FindBin(_true_energy);
+        ybinCV = h_nuebar->GetYaxis()->FindBin(_numi_ang);
+        ratio /= h_nuebar->GetBinContent(xbin, ybin);
 
-        // std::cout <<true_energy << "  " <<  numi_ang << "  " << nu_pdg<< std::endl;
-
-        // Nue
-        if (_nu_pdg == 12){
-            xbin = beamline_hists.at(var_index).at(k_nue)->GetXaxis()->FindBin(_true_energy);
-            ybin = beamline_hists.at(var_index).at(k_nue)->GetYaxis()->FindBin(_numi_ang);
-            return ( beamline_hists.at(var_index).at(k_nue)->GetBinContent(xbin, ybin));
-        }
-        // Nuebar
-        else if (_nu_pdg == -12){
-            xbin = beamline_hists.at(var_index).at(k_nuebar)->GetXaxis()->FindBin(_true_energy);
-            ybin = beamline_hists.at(var_index).at(k_nuebar)->GetYaxis()->FindBin(_numi_ang);
-            return ( beamline_hists.at(var_index).at(k_nuebar)->GetBinContent(xbin, ybin));
-        }
-        // Numu
-        else if (_nu_pdg == 14){
-            xbin = beamline_hists.at(var_index).at(k_numu)->GetXaxis()->FindBin(_true_energy);
-            ybin = beamline_hists.at(var_index).at(k_numu)->GetYaxis()->FindBin(_numi_ang);
-            return ( beamline_hists.at(var_index).at(k_numu)->GetBinContent(xbin, ybin));
-        }
-        // NumuBar
-        else if (_nu_pdg == -14){
-            xbin = beamline_hists.at(var_index).at(k_numubar)->GetXaxis()->FindBin(_true_energy);
-            ybin = beamline_hists.at(var_index).at(k_numubar)->GetYaxis()->FindBin(_numi_ang);
-            return ( beamline_hists.at(var_index).at(k_numubar)->GetBinContent(xbin, ybin));
-        }
-        else return 1.0;
+        return (ratio);
     }
+    // Numu
+    else if (_nu_pdg == 14){
+        
+        // Get Numu histogram
+        boolhist = _util.GetHist(f_flux, h_uni_numu, Form("numu/Multisims/numu_%s_Uni_%i_AV_TPC_2D", label.c_str(), uni));
+        if (boolhist == false) gSystem->Exit(0);
+    
+        xbin = h_uni_numu->GetXaxis()->FindBin(_true_energy);
+        ybin = h_uni_numu->GetYaxis()->FindBin(_numi_ang);
+        ratio = h_uni_numu->GetBinContent(xbin, ybin);
+        
+        // Get the numu flux histogram from the file CV
+        boolhist = _util.GetHist(f_flux, h_numu,         "numu/Detsmear/numu_CV_AV_TPC_2D");       
+        if (boolhist == false) gSystem->Exit(0); 
+
+        xbinCV = h_numu->GetXaxis()->FindBin(_true_energy);
+        ybinCV = h_numu->GetYaxis()->FindBin(_numi_ang);
+        ratio /= h_numu->GetBinContent(xbin, ybin);
+
+        return (ratio);
+    }
+    // NumuBar
+    else if (_nu_pdg == -14){
+        
+        // Get Numubar histogram
+        boolhist = _util.GetHist(f_flux, h_uni_numubar, Form("numubar/Multisims/numubar_%s_Uni_%i_AV_TPC_2D", label.c_str(), uni));
+        if (boolhist == false) gSystem->Exit(0);
+    
+        xbin = h_uni_numubar->GetXaxis()->FindBin(_true_energy);
+        ybin = h_uni_numubar->GetYaxis()->FindBin(_numi_ang);
+        ratio = h_uni_numubar->GetBinContent(xbin, ybin);
+        
+        // Get the numubar flux histogram from the file CV
+        boolhist = _util.GetHist(f_flux, h_numubar,         "numubar/Detsmear/numubar_CV_AV_TPC_2D");       
+        if (boolhist == false) gSystem->Exit(0); 
+
+        xbinCV = h_numubar->GetXaxis()->FindBin(_true_energy);
+        ybinCV = h_numubar->GetYaxis()->FindBin(_numi_ang);
+        ratio /= h_numubar->GetBinContent(xbin, ybin);
+
+        return (ratio);
+    }
+    else
+        return 1.0;
+
 
 }
 // -----------------------------------------------------------------------------
@@ -802,7 +1322,7 @@ void CrossSectionHelper::WriteHists(){
     fnuexsec_out->cd();
 
     // If the variation flag has been set then cheekily change the reeighter label name to use a different folder
-    if (std::string(_util.variation) != "empty" && std::string(_util.variation) != "weight"){
+    if (_util.isvariation && std::string(_util.variation) != "weight"){
         if ( std::string(_util.variation) == "CV"){
             std::cout << "Doing a cheeky swap of the CV name to: " << "detvar_CV" << std::endl;
             reweighter_labels = { "detvar_CV" };
@@ -813,11 +1333,18 @@ void CrossSectionHelper::WriteHists(){
         }
     }
 
+    if (_util.isfakedata){
+
+        std::string fold_name = "fake" + std::string(_util.fakedataname);
+        std::cout << "Doing a cheeky swap of the CV name to: " << fold_name << std::endl;
+            reweighter_labels = { fold_name };
+    }
+
     // Create subdirectory for each reweighter
     TDirectory *dir_labels[reweighter_labels.size()];
 
     // Create subdirectory for each variable
-    TDirectory *dir_labels_var[vars.size()];
+    TDirectory *dir_labels_var[_util.vars.size()];
 
     // We dont want to overwrite these histograms with empty ones
     if (std::string(_util.xsec_rw_mode) != "rw_cuts"){
@@ -841,18 +1368,38 @@ void CrossSectionHelper::WriteHists(){
                 for (unsigned int var = 0; var < h_cross_sec.at(label).at(uni).size(); var ++){
 
                     // See if the directory already exists
-                    bool bool_dir = _util.GetDirectory(fnuexsec_out, dir_labels_var[var], Form("%s/%s", reweighter_labels.at(label).c_str(), vars.at(var).c_str()));
+                    bool bool_dir = _util.GetDirectory(fnuexsec_out, dir_labels_var[var], Form("%s/%s", reweighter_labels.at(label).c_str(), _util.vars.at(var).c_str()));
 
                     // If it doesnt exist then create it
-                    if (!bool_dir) dir_labels_var[var] = dir_labels[label]->mkdir(vars.at(var).c_str());
+                    if (!bool_dir) dir_labels_var[var] = dir_labels[label]->mkdir(_util.vars.at(var).c_str());
 
                     // Go into the directory
                     dir_labels_var[var]->cd();
                 
                     // Now write the histograms, 
                     for (unsigned int p = 0; p < h_cross_sec.at(label).at(uni).at(var).size(); p++){
+
+                        // Certain histograms we want to divide out by the bin width
+                        if ((var == k_var_recoX || var == k_var_trueX) && p != k_xsec_eff )
+                            // h_cross_sec.at(label).at(uni).at(var).at(p)->Scale(1.0, "width");
+
                         h_cross_sec.at(label).at(uni).at(var).at(p)->SetOption("hist");
                         h_cross_sec.at(label).at(uni).at(var).at(p)->Write("",TObject::kOverwrite);
+                    }
+
+                    // Write the smearing matrix to the reco folder
+                    if (var == k_var_recoX || var == k_var_trueX){
+                        h_smear.at(label).at(uni).at(var)->SetOption("col,text00");
+                        h_smear.at(label).at(uni).at(var)->Write(Form("h_run%s_%s_%i_smearing",_util.run_period, reweighter_labels.at(label).c_str(), uni),TObject::kOverwrite);
+                        if (std::string(_util.xsec_bin_mode) == "fine" || std::string(_util.xsec_bin_mode) == "e_ang"){
+                            h_smear_fine.at(label).at(uni).at(var)->SetOption("col");
+                            h_smear_fine.at(label).at(uni).at(var)->Write(Form("h_run%s_%s_%i_smearing_fine",_util.run_period, reweighter_labels.at(label).c_str(), uni),TObject::kOverwrite);
+                        }
+                    }
+
+                    if (var == k_var_trueX && std::string(_util.xsec_bin_mode) == "e_ang" && reweighter_labels.at(label) == "CV" && uni == 0){
+                            h_2D_CV_binning->SetOption("colz");
+                            h_2D_CV_binning->Write("",TObject::kOverwrite);
                     }
                 
                 } // End loop over the variables
@@ -918,6 +1465,12 @@ void CrossSectionHelper::InitTree(){
     tree->SetBranchAddress("weightSplineTimesTune",  &weightSplineTimesTune);
     tree->SetBranchAddress("numi_ang",  &numi_ang);
     tree->SetBranchAddress("nu_pdg",  &nu_pdg);
+    tree->SetBranchAddress("npi0",  &npi0);
+    tree->SetBranchAddress("pi0_e",  &pi0_e);
+    tree->SetBranchAddress("effective_angle",            &effective_angle);
+    tree->SetBranchAddress("cos_effective_angle",        &cos_effective_angle);
+    tree->SetBranchAddress("true_effective_angle",       &true_effective_angle);
+    tree->SetBranchAddress("cos_true_effective_angle",   &cos_true_effective_angle);
     
     tree->SetBranchAddress("weightsGenie",          &weightsGenie);
     tree->SetBranchAddress("weightsReint",          &weightsReint);
@@ -942,6 +1495,10 @@ void CrossSectionHelper::InitTree(){
     tree->SetBranchAddress("knobNormCCCOHdn",       &knobNormCCCOHdn);
     tree->SetBranchAddress("knobNormNCCOHup",       &knobNormNCCOHup);
     tree->SetBranchAddress("knobNormNCCOHdn",       &knobNormNCCOHdn);
+    tree->SetBranchAddress("knobxsr_scc_Fv3up",     &knobxsr_scc_Fv3up);
+    tree->SetBranchAddress("knobxsr_scc_Fv3dn",     &knobxsr_scc_Fv3dn);
+    tree->SetBranchAddress("knobxsr_scc_Fa3up",     &knobxsr_scc_Fa3up);
+    tree->SetBranchAddress("knobxsr_scc_Fa3dn",     &knobxsr_scc_Fa3dn);
 
 }
 // -----------------------------------------------------------------------------
@@ -1040,6 +1597,18 @@ void CrossSectionHelper::SwitchReweighterLabel(std::string label){
     }
     else if (label == "NormNCCOHdn"){
         vec_universes.push_back(knobNormNCCOHdn);
+    }
+    else if (label == "xsr_scc_Fv3up"){
+        vec_universes.push_back(knobxsr_scc_Fv3up);
+    }
+    else if (label == "xsr_scc_Fv3dn"){
+        vec_universes.push_back(knobxsr_scc_Fv3dn);
+    }
+    else if (label == "xsr_scc_Fa3up"){
+        vec_universes.push_back(knobxsr_scc_Fa3up);
+    }
+    else if (label == "xsr_scc_Fa3dn"){
+        vec_universes.push_back(knobxsr_scc_Fa3dn);
     }
     // This can be the CV or any beamline variation
     else {
@@ -1145,6 +1714,18 @@ void CrossSectionHelper::SwitchReweighterLabel(std::string label, SliceContainer
     else if (label == "NormNCCOHdn"){
         vec_universes.push_back(SC.knobNormNCCOHdn);
     }
+    else if (label == "xsr_scc_Fv3up"){
+        vec_universes.push_back(SC.knobxsr_scc_Fv3up);
+    }
+    else if (label == "xsr_scc_Fv3dn"){
+        vec_universes.push_back(SC.knobxsr_scc_Fv3dn);
+    }
+    else if (label == "xsr_scc_Fa3up"){
+        vec_universes.push_back(SC.knobxsr_scc_Fa3up);
+    }
+    else if (label == "xsr_scc_Fa3dn"){
+        vec_universes.push_back(SC.knobxsr_scc_Fa3dn);
+    }
     // This can be the CV or any beamline variation
     else {
         vec_universes.push_back(1.0);
@@ -1174,13 +1755,13 @@ void CrossSectionHelper::InitialiseHistograms(std::string run_mode){
                 "Horn_p2kA",
                 "Horn_m2kA",
                 "Horn1_x_p3mm",
-                "Horm1_x_m3mm",
+                "Horn1_x_m3mm",
                 "Horn1_y_p3mm",
                 "Horn1_y_m3mm",
                 "Beam_spot_1_1mm",
                 "Beam_spot_1_5mm",
                 "Horn2_x_p3mm",
-                "Horm2_x_m3mm",
+                "Horn2_x_m3mm",
                 "Horn2_y_p3mm",
                 "Horn2_y_m3mm",
                 "Horns_0mm_water",
@@ -1214,10 +1795,15 @@ void CrossSectionHelper::InitialiseHistograms(std::string run_mode){
                 "RPA_CCQE_Reduceddn",
                 "NormCCCOHdn",
                 "NormNCCOHdn",
+                "xsr_scc_Fv3up",
+                "xsr_scc_Fa3up",
+                "xsr_scc_Fv3dn",
+                "xsr_scc_Fa3dn",
                 "Dirtup",
                 "Dirtdn",
                 "POTup",
-                "POTdn"
+                "POTdn", 
+                "pi0"
             };
         }
         // Only run PPFX
@@ -1255,20 +1841,50 @@ void CrossSectionHelper::InitialiseHistograms(std::string run_mode){
         }
     }
 
+    // Set the histogram bins
+
+    // Electron/Shower Energy
+    if (std::string(_util.xsec_var) =="elec_E"){
+        hist_bins = _util.reco_shr_bins;
+        fine_bins = _util.true_shr_bins;
+    }
+    // Electron/Shower effective angle
+    else if (std::string(_util.xsec_var) =="elec_ang"){
+        hist_bins = _util.reco_shr_bins_ang;
+        fine_bins = _util.true_shr_bins_ang;
+    }
+    // Electron/Shower effective cangle
+    else if (std::string(_util.xsec_var) =="elec_cang"){
+        hist_bins = _util.reco_shr_bins_cang;
+        fine_bins = _util.true_shr_bins_cang;
+    }
+    else {
+        std::cout << "Unsupported parameter...exiting!" << std::endl;
+        return;
+    }
+
     // Set the bins here
-    bins.resize(vars.size());
+    bins.resize(_util.vars.size());
+    bins_fine.resize(_util.vars.size());
 
     // Integrated X-Section Bin definition
-    bins.at(k_var_integrated) = { 0.0, 1.1 };
+    bins.at(k_var_integrated)      = { 0.0, 1.1 };
+    bins_fine.at(k_var_integrated) = { 0.0, 1.1 };
 
     // Reconstructed electron energy Bin definition
-    bins.at(k_var_reco_el_E) = _util.reco_shr_bins;
+    bins.at(k_var_recoX)      = hist_bins;
+    bins_fine.at(k_var_recoX) = fine_bins;
 
     // True electron energy Bin definition
-    bins.at(k_var_true_el_E) = _util.reco_shr_bins;
+    bins.at(k_var_trueX)      = hist_bins;
+    bins_fine.at(k_var_trueX) = fine_bins;
 
     // Resize to the number of reweighters
     h_cross_sec.resize(reweighter_labels.size());
+    h_smear.resize(reweighter_labels.size());
+    
+    if (std::string(_util.xsec_bin_mode) == "fine" || std::string(_util.xsec_bin_mode) == "e_ang")
+        h_smear_fine.resize(reweighter_labels.size());
     
     // Resize each reweighter to their number of universes
     for (unsigned int j=0; j < reweighter_labels.size(); j++){
@@ -1277,25 +1893,45 @@ void CrossSectionHelper::InitialiseHistograms(std::string run_mode){
         if ( reweighter_labels.at(j) == "weightsGenie"){
             std::cout << "Setting Genie All Histogram universe vector to size: " << uni_genie << std::endl;
             h_cross_sec.at(j).resize(uni_genie);
+            h_smear.at(j).resize(uni_genie);
+            
+            if (std::string(_util.xsec_bin_mode) == "fine" || std::string(_util.xsec_bin_mode) == "e_ang")
+                h_smear_fine.at(j).resize(uni_genie);
         }
         // Specific resizing -- hardcoded and may break in the future
         else if ( reweighter_labels.at(j) == "weightsPPFX"){
             std::cout << "Setting PPFX All Histogram universe vector to size: " << uni_ppfx << std::endl;
             h_cross_sec.at(j).resize(uni_ppfx);
+            h_smear.at(j).resize(uni_ppfx);
+            
+            if (std::string(_util.xsec_bin_mode) == "fine" || std::string(_util.xsec_bin_mode) == "e_ang")
+                h_smear_fine.at(j).resize(uni_ppfx);
         }
         // Specific resizing -- hardcoded and may break in the future
         else if ( reweighter_labels.at(j) == "weightsReint" ){
             std::cout << "Setting Geant Reinteractions Histogram universe vector to size: " << uni_reint << std::endl;
             h_cross_sec.at(j).resize(uni_reint);
+            h_smear.at(j).resize(uni_reint);
+            
+            if (std::string(_util.xsec_bin_mode) == "fine" || std::string(_util.xsec_bin_mode) == "e_ang")
+                h_smear_fine.at(j).resize(uni_reint);
         }
          // Specific resizing -- hardcoded and may break in the future
         else if ( reweighter_labels.at(j) == "MCStats" ){
             std::cout << "Setting MCStats Histogram universe vector to size: " << uni_mcstats << std::endl;
             h_cross_sec.at(j).resize(uni_mcstats);
+            h_smear.at(j).resize(uni_mcstats);
+            
+            if (std::string(_util.xsec_bin_mode) == "fine" || std::string(_util.xsec_bin_mode) == "e_ang")
+                h_smear_fine.at(j).resize(uni_mcstats);
         }
         // Default size of 1
         else {
             h_cross_sec.at(j).resize(1);
+            h_smear.at(j).resize(1);
+            
+            if (std::string(_util.xsec_bin_mode) == "fine" || std::string(_util.xsec_bin_mode) == "e_ang")
+                h_smear_fine.at(j).resize(1);
         }
 
     }
@@ -1307,7 +1943,11 @@ void CrossSectionHelper::InitialiseHistograms(std::string run_mode){
 
         for (unsigned int uni = 0; uni < h_cross_sec.at(label).size(); uni++){
             // Resize the histogram vector. plot var, cuts, classifications
-            h_cross_sec.at(label).at(uni).resize(vars.size());
+            h_cross_sec.at(label).at(uni).resize(_util.vars.size());
+            h_smear.at(label).at(uni).resize(_util.vars.size());
+            
+            if (std::string(_util.xsec_bin_mode) == "fine" || std::string(_util.xsec_bin_mode) == "e_ang")
+                h_smear_fine.at(label).at(uni).resize(_util.vars.size());
         }
 
     }
@@ -1333,6 +1973,7 @@ void CrossSectionHelper::InitialiseHistograms(std::string run_mode){
     }
 
     std::vector<double> temp_bins;
+    std::vector<double> temp_bins_fine;
 
 
     // Loop over the rewighters
@@ -1340,9 +1981,18 @@ void CrossSectionHelper::InitialiseHistograms(std::string run_mode){
 
         // loop over the universes
         for (unsigned int uni=0; uni < h_cross_sec.at(label).size(); uni++){
+
+            // Define bin labels fro smearing matrix
+            int nbins_smear;
+            double* edges_smear;
+            int nbins_smear_fine;
+            double* edges_smear_fine;
             
             // Loop over the variables
             for (unsigned int var = 0; var < h_cross_sec.at(label).at(uni).size(); var ++){
+
+                if (std::string(_util.xsecmode) == "txtlist")
+                    continue;
 
                 // Get the number of bins and the right vector
                 int const nbins = bins.at(var).size()-1;
@@ -1350,28 +2000,97 @@ void CrossSectionHelper::InitialiseHistograms(std::string run_mode){
                 temp_bins = bins.at(var);
                 double* edges = &temp_bins[0]; // Cast to an array 
 
+                int const nbins_fine = bins_fine.at(var).size()-1;
+                temp_bins_fine.clear();
+                temp_bins_fine = bins_fine.at(var);
+                double* edges_fine = &temp_bins_fine[0]; // Cast to an array 
+
+                if (var == k_var_recoX){
+                    nbins_smear = nbins;
+                    edges_smear = edges;
+                    nbins_smear_fine = nbins_fine;
+                    edges_smear_fine = edges_fine;
+                }
 
                 // loop over and create the histograms
                 for (unsigned int i=0; i < xsec_types.size();i++){    
-                    if (i == k_xsec_sel || i == k_xsec_bkg || i == k_xsec_gen || i == k_xsec_sig || i == k_xsec_ext || i == k_xsec_dirt || i == k_xsec_data){
-                        h_cross_sec.at(label).at(uni).at(var).at(i) = new TH1D ( Form("h_run%s_%s_%i_%s_%s",_util.run_period, reweighter_labels.at(label).c_str(), uni, vars.at(var).c_str(), xsec_types.at(i).c_str()) ,";Reco. Leading Shower Energy [GeV]; Entries", nbins, edges);
+                    if (i == k_xsec_sel || i == k_xsec_bkg || i == k_xsec_gen || i == k_xsec_gen_smear || i == k_xsec_sig || i == k_xsec_ext || i == k_xsec_dirt || i == k_xsec_data){
+                        h_cross_sec.at(label).at(uni).at(var).at(i) = new TH1D ( Form("h_run%s_%s_%i_%s_%s",_util.run_period, reweighter_labels.at(label).c_str(), uni, _util.vars.at(var).c_str(), xsec_types.at(i).c_str()) ,Form("%s", _util.var_labels_events.at(var).c_str()), nbins, edges);
+                    }
+                    else if (i == k_xsec_gen_fine){
+                        
+                        if (std::string(_util.xsec_bin_mode) == "e_ang"){
+                            int const nbins_E = _util.true_shr_bins.size()-1;
+                            int const nbins_ang = _util.true_shr_bins_ang.size()-1;
+                            h_cross_sec.at(label).at(uni).at(var).at(i) = new TH1D ( Form("h_run%s_%s_%i_%s_%s",_util.run_period, reweighter_labels.at(label).c_str(), uni, _util.vars.at(var).c_str(), xsec_types.at(i).c_str()) ,Form("%s", _util.var_labels_events.at(var).c_str()), nbins_E*nbins_ang, 0, nbins_E*nbins_ang);
+                        }
+                        else 
+                            h_cross_sec.at(label).at(uni).at(var).at(i) = new TH1D ( Form("h_run%s_%s_%i_%s_%s",_util.run_period, reweighter_labels.at(label).c_str(), uni, _util.vars.at(var).c_str(), xsec_types.at(i).c_str()) ,Form("%s", _util.var_labels_events.at(var).c_str()), nbins_fine, edges_fine);
+                    }
+                    else if (i == k_xsec_mcxsec_fine){
+                        
+                        if (std::string(_util.xsec_bin_mode) == "e_ang"){
+                            int const nbins_E = _util.true_shr_bins.size()-1;
+                            int const nbins_ang = _util.true_shr_bins_ang.size()-1;
+                            h_cross_sec.at(label).at(uni).at(var).at(i) = new TH1D ( Form("h_run%s_%s_%i_%s_%s",_util.run_period, reweighter_labels.at(label).c_str(), uni, _util.vars.at(var).c_str(), xsec_types.at(i).c_str()) ,Form("%s", _util.var_labels_xsec.at(var).c_str()), nbins_E*nbins_ang, 0, nbins_E*nbins_ang);
+                        }
+                        else
+                            h_cross_sec.at(label).at(uni).at(var).at(i) = new TH1D ( Form("h_run%s_%s_%i_%s_%s",_util.run_period, reweighter_labels.at(label).c_str(), uni, _util.vars.at(var).c_str(), xsec_types.at(i).c_str()) ,Form("%s", _util.var_labels_xsec.at(var).c_str()), nbins_fine, edges_fine);
                     }
                     else if (i == k_xsec_eff){
-                        h_cross_sec.at(label).at(uni).at(var).at(i) = new TH1D ( Form("h_run%s_%s_%i_%s_%s",_util.run_period, reweighter_labels.at(label).c_str(), uni, vars.at(var).c_str(), xsec_types.at(i).c_str()) ,";Reco. Leading Shower Energy [GeV]; Efficiency", nbins, edges);
+                        h_cross_sec.at(label).at(uni).at(var).at(i) = new TH1D ( Form("h_run%s_%s_%i_%s_%s",_util.run_period, reweighter_labels.at(label).c_str(), uni, _util.vars.at(var).c_str(), xsec_types.at(i).c_str()) ,Form("%s", _util.var_labels_eff.at(var).c_str()), nbins, edges);
                     }
-                    else if (i == k_xsec_dataxsec || i == k_xsec_mcxsec){
-                        h_cross_sec.at(label).at(uni).at(var).at(i) = new TH1D ( Form("h_run%s_%s_%i_%s_%s",_util.run_period, reweighter_labels.at(label).c_str(), uni, vars.at(var).c_str(), xsec_types.at(i).c_str()) ,Form("%s", var_labels.at(var).c_str()), nbins, edges);
+                    else if (i == k_xsec_dataxsec || i == k_xsec_mcxsec || i == k_xsec_mcxsec_smear){
+                        h_cross_sec.at(label).at(uni).at(var).at(i) = new TH1D ( Form("h_run%s_%s_%i_%s_%s",_util.run_period, reweighter_labels.at(label).c_str(), uni, _util.vars.at(var).c_str(), xsec_types.at(i).c_str()) ,Form("%s", _util.var_labels_xsec.at(var).c_str()), nbins, edges);
                     }
                     else {
                         // If this is the case then there is an uncaught case
                         std::cout << "Houston we have a problem!" << std::endl;
                     }
                 }
+
+                // We dont care about the integrated smearing, so set it to some arbitary value
+                if (var == k_var_integrated){
+                    h_smear.at(label).at(uni).at(var)      = new TH2D ( Form("h_run%s_%s_%i_%s_smearing",_util.run_period, reweighter_labels.at(label).c_str(), uni, _util.vars.at(var).c_str()), _util.smear_hist_name.c_str(), 1, 0, 1, 1, 0, 1);
+                    
+                    if (std::string(_util.xsec_bin_mode) == "fine" || std::string(_util.xsec_bin_mode) == "e_ang")
+                        h_smear_fine.at(label).at(uni).at(var) = new TH2D ( Form("h_run%s_%s_%i_%s_smearing_fine",_util.run_period, reweighter_labels.at(label).c_str(), uni, _util.vars.at(var).c_str()), _util.smear_hist_name.c_str(), 1, 0, 1, 1, 0, 1);
+                }
+                // Set the reco and true bins
+                else {
+                    h_smear.at(label).at(uni).at(var)      = new TH2D ( Form("h_run%s_%s_%i_%s_smearing",_util.run_period, reweighter_labels.at(label).c_str(), uni, _util.vars.at(var).c_str()), _util.smear_hist_name.c_str(), nbins_smear, edges_smear, nbins_smear, edges_smear);
+                    
+                    if (std::string(_util.xsec_bin_mode) == "fine")
+                        h_smear_fine.at(label).at(uni).at(var) = new TH2D ( Form("h_run%s_%s_%i_%s_smearing_fine",_util.run_period, reweighter_labels.at(label).c_str(), uni, _util.vars.at(var).c_str()), _util.smear_hist_name.c_str(), nbins_smear_fine, edges_smear_fine, nbins_smear, edges_smear);
+                    else if (std::string(_util.xsec_bin_mode) == "e_ang"){
+                        int const nbins_E = _util.true_shr_bins.size()-1;
+                        int const nbins_ang = _util.true_shr_bins_ang.size()-1;
+                        h_smear_fine.at(label).at(uni).at(var) = new TH2D ( Form("h_run%s_%s_%i_%s_smearing_fine",_util.run_period, reweighter_labels.at(label).c_str(), uni, _util.vars.at(var).c_str()), _util.smear_hist_name.c_str(), nbins_E*nbins_ang, 0, nbins_E*nbins_ang, nbins_smear, edges_smear);
+                    }
+                
+                
+                }
+                
+
             } // End loop over the variables
+
         
         } // End loop over the universes
     
     } // End loop over the labels
+
+
+    // Create histogram for binning
+    if (std::string(_util.xsec_bin_mode) == "e_ang"){
+        // Get the number of bins and the right vector
+        int const nbins_E = _util.true_shr_bins.size()-1;
+        std::vector<double> temp_bins_E = _util.true_shr_bins;
+        double* edges_E = &temp_bins_E[0]; // Cast to an array 
+        int const nbins_ang = _util.true_shr_bins_ang.size()-1;
+        std::vector<double>temp_bins_ang = _util.true_shr_bins_ang;
+        double* edges_ang = &temp_bins_ang[0]; // Cast to an array 
+        h_2D_CV_binning = new TH2D( "h_2D_CV_binning", ";E^{true}_{e#lower[-0.5]{-} + e^{+}} [GeV]; #beta^{true}_{e#lower[-0.5]{-} + e^{+}} [deg]", nbins_E, edges_E, nbins_ang, edges_ang );
+    }
 
 
     // Now lets create the hostogram vector for the cuts
@@ -1439,7 +2158,6 @@ void CrossSectionHelper::InitialiseHistograms(std::string run_mode){
                 
                 // Only initialise if this mode to stop loading too much into memory
                 if (std::string(_util.xsec_rw_mode) == "rw_cuts"){
-                    h_cut_v.at(label).at(cut).at(_util.k_cut_softwaretrig).at(uni)                   = new TH1D(Form("h_reco_softwaretrig_%s_%s_%i",                   reweighter_labels.at(label).c_str(), _util.cut_dirs.at(cut).c_str(), uni), "", 2, 0, 2);
                     h_cut_v.at(label).at(cut).at(_util.k_cut_nslice).at(uni)                         = new TH1D(Form("h_reco_nslice_%s_%s_%i",                         reweighter_labels.at(label).c_str(), _util.cut_dirs.at(cut).c_str(), uni), "", 2, 0, 2);
                     h_cut_v.at(label).at(cut).at(_util.k_cut_shower_multiplicity).at(uni)            = new TH1D(Form("h_reco_shower_multiplicity_%s_%s_%i",            reweighter_labels.at(label).c_str(), _util.cut_dirs.at(cut).c_str(), uni), "", 6, 0, 6);
                     h_cut_v.at(label).at(cut).at(_util.k_cut_track_multiplicity).at(uni)             = new TH1D(Form("h_reco_track_multiplicity_%s_%s_%i",             reweighter_labels.at(label).c_str(), _util.cut_dirs.at(cut).c_str(), uni), "", 6, 0, 6);
@@ -1450,7 +2168,7 @@ void CrossSectionHelper::InitialiseHistograms(std::string run_mode){
                     h_cut_v.at(label).at(cut).at(_util.k_cut_shower_score).at(uni)                   = new TH1D(Form("h_reco_shower_score_%s_%s_%i",                   reweighter_labels.at(label).c_str(), _util.cut_dirs.at(cut).c_str(), uni), "", 20, 0, 0.5);
                     h_cut_v.at(label).at(cut).at(_util.k_cut_shr_tkfit_dedx_max).at(uni)             = new TH1D(Form("h_reco_shr_tkfit_dedx_max_%s_%s_%i",             reweighter_labels.at(label).c_str(), _util.cut_dirs.at(cut).c_str(), uni), "", 40, 0, 10);
                     h_cut_v.at(label).at(cut).at(_util.k_cut_shr_tkfit_dedx_max_with_tracks).at(uni) = new TH1D(Form("h_reco_shr_tkfit_dedx_max_with_tracks_%s_%s_%i", reweighter_labels.at(label).c_str(), _util.cut_dirs.at(cut).c_str(), uni), "", 40, 0, 10);
-                    h_cut_v.at(label).at(cut).at(_util.k_cut_shr_tkfit_dedx_max_no_tracks).at(uni)   = new TH1D(Form("h_reco_shr_tkfit_dedx_max_no_tracks_%s_%s_%i",   reweighter_labels.at(label).c_str(), _util.cut_dirs.at(cut).c_str(), uni), "", 40, 0, 10);
+                    h_cut_v.at(label).at(cut).at(_util.k_cut_shr_tkfit_dedx_max_no_tracks).at(uni)   = new TH1D(Form("h_reco_shr_tkfit_dedx_max_no_tracks_%s_%s_%i",   reweighter_labels.at(label).c_str(), _util.cut_dirs.at(cut).c_str(), uni), "", 20, 0, 10);
                     h_cut_v.at(label).at(cut).at(_util.k_cut_shower_to_vtx_dist).at(uni)             = new TH1D(Form("h_reco_shower_to_vtx_dist_%s_%s_%i",             reweighter_labels.at(label).c_str(), _util.cut_dirs.at(cut).c_str(), uni), "", 20, 0, 20);
                     h_cut_v.at(label).at(cut).at(_util.k_cut_hits_ratio).at(uni)                     = new TH1D(Form("h_reco_hits_ratio_%s_%s_%i",                     reweighter_labels.at(label).c_str(), _util.cut_dirs.at(cut).c_str(), uni), "", 21, 0, 1.05);
                     h_cut_v.at(label).at(cut).at(_util.k_cut_CosmicIPAll3D).at(uni)                  = new TH1D(Form("h_reco_CosmicIPAll3D_%s_%s_%i",                  reweighter_labels.at(label).c_str(), _util.cut_dirs.at(cut).c_str(), uni), "", 40, 0, 200);
@@ -1461,9 +2179,18 @@ void CrossSectionHelper::InitialiseHistograms(std::string run_mode){
                     h_cut_v.at(label).at(cut).at(_util.k_cut_shower_energy_cali).at(uni)             = new TH1D(Form("h_reco_shower_energy_cali_%s_%s_%i",             reweighter_labels.at(label).c_str(), _util.cut_dirs.at(cut).c_str(), uni), "", 20, 0, 4);
                     h_cut_v.at(label).at(cut).at(_util.k_cut_flash_time).at(uni)                     = new TH1D(Form("h_reco_flash_time_%s_%s_%i",                     reweighter_labels.at(label).c_str(), _util.cut_dirs.at(cut).c_str(), uni), "", 50, 0, 25);
                     h_cut_v.at(label).at(cut).at(_util.k_cut_flash_pe).at(uni)                       = new TH1D(Form("h_reco_flash_pe_%s_%s_%i",                       reweighter_labels.at(label).c_str(), _util.cut_dirs.at(cut).c_str(), uni), "", 25, 0, 5000);
+                    h_cut_v.at(label).at(cut).at(_util.k_cut_effective_angle).at(uni)                = new TH1D(Form("h_reco_effective_angle_%s_%s_%i",                reweighter_labels.at(label).c_str(), _util.cut_dirs.at(cut).c_str(), uni), "", 13, 0, 190);
+                    h_cut_v.at(label).at(cut).at(_util.k_cut_effective_cosangle).at(uni)             = new TH1D(Form("h_reco_effective_cosangle_%s_%s_%i",             reweighter_labels.at(label).c_str(), _util.cut_dirs.at(cut).c_str(), uni), "", 16, -1, 1);
+
 
                     double* edges = &_util.reco_shr_bins[0]; // Cast to an array 
                     h_cut_v.at(label).at(cut).at(_util.k_cut_shower_energy_cali_rebin).at(uni)  = new TH1D(Form("h_reco_shower_energy_cali_rebin_%s_%s_%i",  reweighter_labels.at(label).c_str(), _util.cut_dirs.at(cut).c_str(), uni), "", _util.reco_shr_bins.size()-1, edges);
+
+                    edges = &_util.reco_shr_bins_ang[0]; // Cast to an array 
+                    h_cut_v.at(label).at(cut).at(_util.k_cut_effective_angle_rebin).at(uni)                = new TH1D(Form("h_reco_effective_angle_rebin_%s_%s_%i",                reweighter_labels.at(label).c_str(), _util.cut_dirs.at(cut).c_str(), uni), "", _util.reco_shr_bins_ang.size()-1, edges);
+                    
+                    edges = &_util.reco_shr_bins_cang[0]; // Cast to an array 
+                    h_cut_v.at(label).at(cut).at(_util.k_cut_effective_cosangle_rebin).at(uni)             = new TH1D(Form("h_reco_effective_cosangle_rebin_%s_%s_%i",             reweighter_labels.at(label).c_str(), _util.cut_dirs.at(cut).c_str(), uni), "", _util.reco_shr_bins_cang.size()-1, edges);
                 }
             }
         }
@@ -1476,16 +2203,50 @@ void CrossSectionHelper::InitialiseHistograms(std::string run_mode){
 
 }
 // -----------------------------------------------------------------------------
-void CrossSectionHelper::FillHists(int label, int uni, int xsec_type, double weight_uni, float shr_energy_cali, float elec_e){
+void CrossSectionHelper::FillHists(int label, int uni, int xsec_type, double weight_uni, float _recoX, float _trueX){
 
     // Integrated
     h_cross_sec.at(label).at(uni).at(k_var_integrated).at(xsec_type)->Fill(1.0, weight_uni);
 
     // Reco Electron Energy
-    h_cross_sec.at(label).at(uni).at(k_var_reco_el_E).at(xsec_type)->Fill(shr_energy_cali, weight_uni);
+    h_cross_sec.at(label).at(uni).at(k_var_recoX).at(xsec_type)->Fill(_recoX, weight_uni);
 
     // True Electron Energy
-    h_cross_sec.at(label).at(uni).at(k_var_true_el_E).at(xsec_type)->Fill(elec_e, weight_uni);
+    if (xsec_type != k_xsec_gen_fine){
+        h_cross_sec.at(label).at(uni).at(k_var_trueX).at(xsec_type)->Fill(_trueX, weight_uni);
+    }
+    else { 
+
+        // In the case of a response matrix made from 2 variables, we need a bin index to fill
+        if (std::string(_util.xsec_bin_mode) == "e_ang"){
+            int index = GetBinIndex();
+            h_cross_sec.at(label).at(uni).at(k_var_trueX).at(xsec_type)->Fill(index, weight_uni);
+        }
+        // Fill with truth variable for fine bins
+        else {
+            h_cross_sec.at(label).at(uni).at(k_var_trueX).at(xsec_type)->Fill(_trueX, weight_uni);
+        }
+
+    }
+    
+
+    // Smearing Matrix -- only fill for selected signal events
+    if (xsec_type == k_xsec_sig){
+        h_smear.at(label).at(uni).at(k_var_recoX)->Fill(_trueX, _recoX, weight_uni);
+        h_smear.at(label).at(uni).at(k_var_trueX)->Fill(_trueX, _recoX, weight_uni);
+        
+        // In the case of a response matrix made from 2 variables, we need a bin index to fill
+        if (std::string(_util.xsec_bin_mode) == "e_ang"){
+            int index = GetBinIndex();
+            h_smear_fine.at(label).at(uni).at(k_var_recoX)->Fill(index, _recoX, weight_uni);
+            h_smear_fine.at(label).at(uni).at(k_var_trueX)->Fill(index, _recoX, weight_uni);
+            
+        }
+        else if (std::string(_util.xsec_bin_mode) == "fine") {
+            h_smear_fine.at(label).at(uni).at(k_var_recoX)->Fill(_trueX, _recoX, weight_uni);
+            h_smear_fine.at(label).at(uni).at(k_var_trueX)->Fill(_trueX, _recoX, weight_uni);
+        }
+    }
 
 }
 // -----------------------------------------------------------------------------
@@ -1578,7 +2339,7 @@ void CrossSectionHelper::GetBeamlineHists(){
         beamline_hists.at(f).at(k_nue)->SetDirectory(f_flux);
 
         // Get the flux before dividing
-        double xbin_th   = beamline_hists.at(f).at(k_nue)->GetXaxis()->FindBin(energy_threshold);              // find the x bin to integrate from 
+        double xbin_th   = beamline_hists.at(f).at(k_nue)->GetXaxis()->FindBin(_util.energy_threshold);              // find the x bin to integrate from 
         beamline_flux.at(f) += beamline_hists.at(f).at(k_nue)->Integral( xbin_th, beamline_hists.at(f).at(k_nue)->GetNbinsX()+1, 0, beamline_hists.at(f).at(k_nue)->GetNbinsY()+1); // Integrate over the flux
     
         // Now divide it by the CV
@@ -1596,7 +2357,7 @@ void CrossSectionHelper::GetBeamlineHists(){
         beamline_hists.at(f).at(k_nuebar)->SetDirectory(f_flux);
         
         // Get the flux before dividing
-        xbin_th   = beamline_hists.at(f).at(k_nuebar)->GetXaxis()->FindBin(energy_threshold);              // find the x bin to integrate from 
+        xbin_th   = beamline_hists.at(f).at(k_nuebar)->GetXaxis()->FindBin(_util.energy_threshold);              // find the x bin to integrate from 
         beamline_flux.at(f) += beamline_hists.at(f).at(k_nuebar)->Integral( xbin_th, beamline_hists.at(f).at(k_nuebar)->GetNbinsX()+1, 0, beamline_hists.at(f).at(k_nuebar)->GetNbinsY()+1); // Integrate over the flux
 
         // Now divide it by the CV
@@ -1619,13 +2380,13 @@ bool CrossSectionHelper::CheckBeamline(std::string variation){
     if (variation == "Horn_p2kA"           ||
         variation == "Horn_m2kA"           ||
         variation == "Horn1_x_p3mm"        ||
-        variation == "Horm1_x_m3mm"        ||
+        variation == "Horn1_x_m3mm"        ||
         variation == "Horn1_y_p3mm"        ||
         variation == "Horn1_y_m3mm"        ||
         variation == "Beam_spot_1_1mm"     ||
         variation == "Beam_spot_1_5mm"     ||
         variation == "Horn2_x_p3mm"        ||
-        variation == "Horm2_x_m3mm"        ||
+        variation == "Horn2_x_m3mm"        ||
         variation == "Horn2_y_p3mm"        ||
         variation == "Horn2_y_m3mm"        ||
         variation == "Horns_0mm_water"     ||
@@ -1652,13 +2413,13 @@ int CrossSectionHelper::GetBeamlineIndex(std::string variation){
     if       (variation == "Horn_p2kA"          ) return k_Horn_p2kA;
     else if  (variation == "Horn_m2kA"          ) return k_Horn_m2kA;
     else if  (variation == "Horn1_x_p3mm"       ) return k_Horn1_x_p3mm;
-    else if  (variation == "Horm1_x_m3mm"       ) return k_Horm1_x_m3mm;
+    else if  (variation == "Horn1_x_m3mm"       ) return k_Horn1_x_m3mm;
     else if  (variation == "Horn1_y_p3mm"       ) return k_Horn1_y_p3mm;
     else if  (variation == "Horn1_y_m3mm"       ) return k_Horn1_y_m3mm;
     else if  (variation == "Beam_spot_1_1mm"    ) return k_Beam_spot_1_1mm;
     else if  (variation == "Beam_spot_1_5mm"    ) return k_Beam_spot_1_5mm;
     else if  (variation == "Horn2_x_p3mm"       ) return k_Horn2_x_p3mm;
-    else if  (variation == "Horm2_x_m3mm"       ) return k_Horm2_x_m3mm;
+    else if  (variation == "Horn2_x_m3mm"       ) return k_Horn2_x_m3mm;
     else if  (variation == "Horn2_y_p3mm"       ) return k_Horn2_y_p3mm;
     else if  (variation == "Horn2_y_m3mm"       ) return k_Horn2_y_m3mm;
     else if  (variation == "Horns_0mm_water"    ) return k_Horns_0mm_water;
@@ -1686,11 +2447,11 @@ double CrossSectionHelper::PoissonRandomNumber(int uni){
     if (uni == 0) rand->SetSeed(seed);
 
     // Generate the weight, using a poisson dist with mean 1
-    double weight = rand->Poisson(1);
+    double weight_poisson = rand->Poisson(1);
 
     // std::cout << weight << std::endl;
 
-    return weight;
+    return weight_poisson;
 
 }
 // -----------------------------------------------------------------------------
@@ -1714,9 +2475,519 @@ int CrossSectionHelper::ConcatRunSubRunEvent(int run, int subrun, int event){
     return c; 
 } 
 // -----------------------------------------------------------------------------
+void CrossSectionHelper::Smear(TH1D* h_sig, TH1D* h_gen, TH2D* h_smear, TH1D* h_eff){
+
+    // Change this bool to print info
+    bool debug = false;
+
+    //  ------ First normalise the smearing matrix ------
+    // Loop over rows
+    for (int row=1; row<h_smear->GetXaxis()->GetNbins()+2; row++) {
+        double integral = 0;
+
+        // Loop over columns and get the integral
+        for (int col=1; col<h_smear->GetYaxis()->GetNbins()+2; col++){
+            integral+=h_smear->GetBinContent(row, col);            
+        }
+
+        // Now normalise the column entries by the integral
+        for (int col=1; col<h_smear->GetYaxis()->GetNbins()+2; col++){
+            
+            if (integral == 0){
+                h_smear->SetBinContent(row,col, 0.0 );
+            }
+            else{
+                h_smear->SetBinContent(row,col, h_smear->GetBinContent(row, col)/ integral );
+            }
+            
+        }
+    } 
+
+    double nbins;
+
+    // Electron/Shower Energy
+    if (std::string(_util.xsec_var) =="elec_E"){
+        nbins = _util.reco_shr_bins.size()+1;
+    }
+    // Electron/Shower beta
+    else if (std::string(_util.xsec_var) =="elec_ang"){
+        nbins = _util.reco_shr_bins_ang.size()+1;
+    }
+    // Electron/Shower cos(beta)
+    else if (std::string(_util.xsec_var) =="elec_cang"){
+        nbins = _util.reco_shr_bins_cang.size()+1;
+    }
+
+    // Convert the smearing matrix and histograms to a Matrix
+    TMatrixD SMatrix(nbins, nbins, h_smear->GetArray(), "F");
+    TMatrixD SigMatrix(nbins, 1, h_sig->GetArray(), "F");
+    TMatrixD GenMatrix(nbins, 1, h_gen->GetArray(), "F");
+    
+
+    // Smear the signal selected events
+    TMatrixD SigMatrixSmear(nbins, 1);
+    SigMatrixSmear.Mult(SMatrix,SigMatrix);
+    
+    // Smear the generated events
+    TMatrixD GenMatrixSmear(nbins, 1);
+    GenMatrixSmear.Mult(SMatrix,GenMatrix);
+
+    if (debug){
+        SMatrix.Print();
+        SigMatrix.Print();
+        SigMatrixSmear.Print();
+        GenMatrix.Print();
+        GenMatrixSmear.Print();
+    }
+
+    // Set the efficiency bins
+    for (int bin = 1; bin < h_sig->GetNbinsX()+1; bin++){
+        
+        if (GenMatrixSmear(bin,0) == 0)
+            h_eff->SetBinContent(bin, 0.0);
+        else
+            h_eff->SetBinContent(bin, SigMatrixSmear(bin,0) / GenMatrixSmear(bin,0));
+        
+        h_eff->SetBinError(bin, 0);
+        
+        if (debug)
+            std::cout << 100 * SigMatrix(bin,0) / GenMatrix(bin,0) << "  "<< 100 * SigMatrixSmear(bin,0) / GenMatrixSmear(bin,0) << std::endl;
+    }
+    
+}
 // -----------------------------------------------------------------------------
+void CrossSectionHelper::ApplyResponseMatrix(TH1D* h_gen, TH1D* h_gen_smear, TH1D* h_gen_CV, TH2D* h_smear){
+
+    // Change this bool to print info
+    bool debug = false;
+
+    //  ------ First normalise the smearing matrix ------
+    for (int col=1; col<h_smear->GetYaxis()->GetNbins()+2; col++){
+        double integral = 0;
+
+        // Now normalise the column entries by the number of events in the 1D generated histogram
+        for (int row=1; row<h_smear->GetXaxis()->GetNbins()+2; row++) { 
+            
+            if (h_gen->GetBinContent(row) == 0)
+                h_smear->SetBinContent(row,col, 0.0 );
+            else {
+                // h_smear->SetBinContent(row,col, h_gen->GetBinWidth(row) * h_smear->GetBinContent(row, col)/ h_gen->GetBinContent(row) );
+                h_smear->SetBinContent(row,col, h_smear->GetBinContent(row, col)/ h_gen->GetBinContent(row) );
+            }
+        }
+    } 
+
+
+    // Clear the Bins
+    for (int bin = 0; bin < h_gen_smear->GetNbinsX()+2; bin++){
+        h_gen_smear->SetBinContent(bin, 0);
+    }
+
+    // --- Do the matrix multiplication with the CV gen events --- 
+    // Loop over cols
+    for (int i=1; i<h_smear->GetYaxis()->GetNbins()+2; i++){
+        double integral = 0;
+
+        // Now normalise the column entries by the number of events in the 1D generated histogram
+        for (int j=1; j<h_smear->GetXaxis()->GetNbins()+2; j++) { 
+
+            if (debug)
+                std::cout <<  "R_" << j << i << " * " << j << "  " << h_smear->GetBinContent(j, i) << " * " << h_gen_CV->GetBinContent(j) << std::endl;
+            
+            // h_gen_smear->SetBinContent(i, h_gen_smear->GetBinContent(i) + h_smear->GetBinContent(j, i) * (h_gen_CV->GetBinContent(j)/ h_gen_CV->GetBinWidth(j)));
+            h_gen_smear->SetBinContent(i, h_gen_smear->GetBinContent(i) + h_smear->GetBinContent(j, i) * (h_gen_CV->GetBinContent(j)));
+        }
+
+        if (debug)
+            std::cout << std::endl;
+    } 
+
+    // Set the bin errors to zero
+    for (int bin = 1; bin < h_gen_smear->GetNbinsX()+1; bin++){
+        h_gen_smear->SetBinError(bin, 0);
+    }
+}
 // -----------------------------------------------------------------------------
+void CrossSectionHelper::SaveEvent(std::string _classification, bool _passed_selection, std::vector<float> _ev_weight, double recoX, double trueX){
+
+    // Get rid of the CV
+    _ev_weight.erase(_ev_weight.begin());
+
+    // If the CV weight is zero then lets not fill the event (which is all zeros)
+    if (weight == 0)
+        return;
+
+    // Signal event
+    if ((_classification == "nue_cc" || _classification == "nuebar_cc" || _classification == "unmatched_nue" || _classification == "unmatched_nuebar") && _passed_selection) {
+        
+        isSignal = true;
+        isSelected = true;
+
+        // Initialise the file 
+        if (!filled_sig){
+            evt_dist_sig << _util.vars.at(k_var_trueX)<< "," << _util.vars.at(k_var_recoX) << ", " <<"w";
+        
+            for (unsigned int _uni = 0; _uni <_ev_weight.size(); _uni++ ){
+                evt_dist_sig << "," << "w_" << _uni;
+            }
+        
+            evt_dist_sig << "\n";
+            filled_sig = true;
+        }
+    
+        evt_dist_sig << trueX << "," << recoX << "," << weight*_util.mc_scale_factor;
+        
+        for (unsigned int _uni = 0; _uni <_ev_weight.size(); _uni++ ){
+            evt_dist_sig << "," << _ev_weight.at(_uni)*_util.mc_scale_factor;
+        }
+
+        evt_dist_sig << "\n";
+    }
+    
+    // Background event
+    if ( _classification == "nu_out_fv"  || _classification == "cosmic"       ||
+         _classification == "numu_cc"    || _classification == "numu_cc_pi0"  || _classification == "nc" || 
+         _classification == "nc_pi0"     || ((_classification == "cosmic_nue" || _classification == "cosmic_nuebar") && _passed_selection)  ) {
+
+        // Initialise the file 
+        if (!filled_bkg){
+            evt_dist_bkg << _util.vars.at(k_var_recoX) << "," << "w";
+        
+            for (unsigned int _uni = 0; _uni <_ev_weight.size(); _uni++ ){
+                evt_dist_bkg << "," << "w_" << _uni;
+            }
+        
+            evt_dist_bkg << "\n";
+            filled_bkg = true;
+        }
+
+        evt_dist_bkg << recoX << "," << weight*_util.mc_scale_factor;
+        
+        for (unsigned int _uni = 0; _uni <_ev_weight.size(); _uni++ ){
+            evt_dist_bkg << "," << _ev_weight.at(_uni)*_util.mc_scale_factor;
+        }
+
+        evt_dist_bkg << "\n";
+
+    }
+   
+    // Generated event
+    if (  _classification == "nue_cc"           || _classification == "nuebar_cc" || 
+          _classification == "unmatched_nue"    || _classification == "cosmic_nue" ||
+          _classification == "unmatched_nuebar" || _classification == "cosmic_nuebar") {
+        
+        isSignal = true;
+
+        // Initialise the file 
+        if (!filled_gen){
+            evt_dist_gen << _util.vars.at(k_var_trueX) <<"," <<"w";
+        
+            for (unsigned int _uni = 0; _uni <_ev_weight.size(); _uni++ ){
+                evt_dist_gen << "," << "w_" << _uni;
+            }
+        
+            evt_dist_gen << "\n";
+
+            filled_gen = true;
+        }
+
+        evt_dist_gen << trueX << "," << weight*_util.mc_scale_factor;
+        
+        for (unsigned int _uni = 0; _uni <_ev_weight.size(); _uni++ ){
+            evt_dist_gen << "," << _ev_weight.at(_uni)*_util.mc_scale_factor;
+        }
+
+        evt_dist_gen << "\n";
+
+    }
+    
+    // Data
+    if (_classification == "data"){
+        isData = true;
+        isSelected = true;
+        evt_dist_data << recoX << "\n";
+    }
+
+    // EXT background event
+    if (_classification == "ext" ){
+        isSelected = true;
+
+        // Initialise the file 
+        if (!filled_bkg){
+            evt_dist_bkg << _util.vars.at(k_var_recoX) << "," << "w";
+        
+            for (unsigned int _uni = 0; _uni <_ev_weight.size(); _uni++ ){
+                evt_dist_bkg << "," << "w_" << _uni;
+            }
+        
+            evt_dist_bkg << "\n";
+
+            filled_bkg = true;
+        }
+
+        evt_dist_bkg << recoX << "," << weight*_util.ext_scale_factor;
+        
+        for (unsigned int _uni = 0; _uni <_ev_weight.size(); _uni++ ){
+            evt_dist_bkg << "," << _ev_weight.at(_uni)*_util.ext_scale_factor;
+        }
+
+        evt_dist_bkg << "\n";
+    }
+    // Dirt background event
+    if (_classification == "dirt"){
+        isSelected = true;
+
+        // Initialise the file 
+        if (!filled_bkg){
+            evt_dist_bkg << _util.vars.at(k_var_recoX) << "," << "w";
+        
+            for (unsigned int _uni = 0; _uni <_ev_weight.size(); _uni++ ){
+                evt_dist_bkg << "," << "w_" << _uni;
+            }
+        
+            evt_dist_bkg << "\n";
+
+            filled_bkg = true;
+        }
+
+        evt_dist_bkg << recoX << "," << weight*_util.dirt_scale_factor;
+        
+        for (unsigned int _uni = 0; _uni <_ev_weight.size(); _uni++ ){
+            evt_dist_bkg << "," << _ev_weight.at(_uni)*_util.dirt_scale_factor;
+        }
+
+        evt_dist_bkg << "\n";
+    }
+
+    xTrue = trueX;
+    xReco = recoX;
+
+    event_tree->Fill();
+
+    // Reset TTree _util.vars
+    isData = false;
+    isSignal = false;
+    isSelected = false;
+    
+
+}
 // -----------------------------------------------------------------------------
+int CrossSectionHelper::GetBinIndex(){
+
+    
+    int xbin = h_2D_CV_binning->GetXaxis()->FindBin(elec_e);
+    int ybin = h_2D_CV_binning->GetYaxis()->FindBin(true_effective_angle);
+
+    return xbin*ybin;
+}
 // -----------------------------------------------------------------------------
+void CrossSectionHelper::LoadDetvarCVHist(){
+
+    std::cout << _util.red << "Loading in detector variation CV histogram to smear" << _util.reset << std::endl;
+    
+    // Load in the cross section file
+    TFile* f = new TFile( Form("files/crosssec_run%s.root", _util.run_period) , "UPDATE");
+    
+    TH1D* h_temp;
+    
+    // Get the CV histogram we want to smear
+    h_temp = (TH1D*)f->Get(Form("detvar_CV/%s/h_run%s_CV_0_%s_gen", _util.vars.at(k_var_trueX).c_str(), _util.run_period, _util.vars.at(k_var_trueX).c_str()));
+    h_detvar_cv = (TH1D*)h_temp->Clone();
+    h_detvar_cv->SetDirectory(0);
+
+    delete h_temp;
+
+    f->Close();
+}
 // -----------------------------------------------------------------------------
+void CrossSectionHelper::UnregularizedUnfold(TH1D *h_data_xsec_reco, TH1D* h_data_xsec_true, TH2D* h_response){
+
+    // Getting covariance matrix in TMatrix form
+    TMatrix res_inv;
+    res_inv.Clear();
+    res_inv.ResizeTo(h_response->GetNbinsX(), h_response->GetNbinsY());
+
+    // loop over rows
+    for (int i = 0; i < h_response->GetNbinsX(); i++) {
+
+        // loop over columns
+        for (int j = 0; j < h_response->GetNbinsY(); j++) {
+            res_inv[i][j] = h_response->GetBinContent(i+1, j+1);
+        }
+    
+    }
+
+    // res_inv.Print();
+
+    // Inverting the response matrix
+    TMatrix inverse_res_m = res_inv.Invert();
+
+    // inverse_res_m.Print();
+
+
+    double nbins;
+
+    // Electron/Shower Energy
+    if (std::string(_util.xsec_var) =="elec_E"){
+        nbins = _util.reco_shr_bins.size();
+    }
+    // Electron/Shower beta
+    else if (std::string(_util.xsec_var) =="elec_ang"){
+        nbins = _util.reco_shr_bins_ang.size();
+    }
+    // Electron/Shower cos(beta)
+    else if (std::string(_util.xsec_var) =="elec_cang"){
+        nbins = _util.reco_shr_bins_cang.size();
+    }
+
+    // Clear the Bins
+    for (int bin = 0; bin < h_data_xsec_true->GetNbinsX()+2; bin++){
+        h_data_xsec_true->SetBinContent(bin, 0);
+    }
+
+    // --- Do the matrix multiplication --- 
+    // Loop over cols
+    for (int i=0; i<inverse_res_m.GetNcols(); i++){
+
+        // Now normalise the column entries by the number of events in the 1D generated histogram
+        for (int j=0; j<inverse_res_m.GetNrows(); j++) {         
+            
+            h_data_xsec_true->SetBinContent(i+1, h_data_xsec_true->GetBinContent(i+1) + inverse_res_m[j][i] * (h_data_xsec_reco->GetBinContent(j+1)));
+        }
+
+        h_data_xsec_true->SetBinError(i+1, h_data_xsec_true->GetBinContent(i+1) * (h_data_xsec_reco->GetBinError(i+1) / h_data_xsec_reco->GetBinContent(i+1)) );
+
+    } 
+
+
+}
 // -----------------------------------------------------------------------------
+void CrossSectionHelper::SaveGenXSec(){
+
+    // To run :
+    // ./nuexsec --run 1 --xsec files/trees/nuexsec_tree_merged_run1.root --xsecplot gen --var ../ntuples/genie_v2_intrinsic_events.root geniev2gen
+    // ./nuexsec --run 1 --xsec files/trees/nuexsec_tree_merged_run1.root --xsecplot gen --var ../ntuples/nuwro_intrinsic_events.root nuwrogen
+
+    TFile *f_gen = TFile::Open(_util.mc_file_name, "READ");
+
+
+    TTree *t_gen = (TTree*)f_gen->Get("tree");
+
+    double* edges = &_util.reco_shr_bins[0]; // Cast to an array 
+    TH1D *htemp_e= new TH1D("h_elec_E","", _util.reco_shr_bins.size()-1, edges);
+
+    edges = &_util.reco_shr_bins_cang[0]; // Cast to an array 
+    TH1D *htemp_cang= new TH1D("h_elec_cang","", _util.reco_shr_bins_cang.size()-1, edges);
+
+    TH1D *htemp_tot= new TH1D("h_elec_tot","", 1, 0, 1.1);
+
+    t_gen->Draw("elec_e >> h_elec_E", "ppfx_cv*(elec_e > 0.12 && nu_e > 0.06 && infv && ccnc == 0)");
+    t_gen->Draw("cosbeta >> h_elec_cang", "ppfx_cv*(elec_e > 0.12 && nu_e > 0.06 && infv && ccnc == 0)");
+    t_gen->Draw("0.5 >> h_elec_tot", "ppfx_cv*(elec_e > 0.12 && nu_e > 0.06 && infv && ccnc == 0)");
+
+    TFile *f_out = TFile::Open(Form("files/crosssec_run%s.root", _util.run_period), "UPDATE");
+
+    htemp_e->Scale(1.0 / (integrated_flux * mc_flux_scale_factor * N_target_MC));
+    htemp_cang->Scale(1.0 / (integrated_flux * mc_flux_scale_factor * N_target_MC));
+    htemp_tot->Scale(1.0 / (integrated_flux * mc_flux_scale_factor * N_target_MC));
+
+    htemp_e->Scale(1.0e39);
+    htemp_cang->Scale(1.0e39);
+    htemp_tot->Scale(1.0e39);
+
+    htemp_e->SetOption("hist");
+    htemp_cang->SetOption("hist");
+    htemp_tot->SetOption("hist");
+    
+    // Create a directory to save the histograms
+    TDirectory *dir;
+    
+    // Get the directory 
+    bool bool_dir = _util.GetDirectory(f_out, dir, _util.variation );
+
+    // Make the directory
+    if (!bool_dir){
+        dir = f_out->mkdir(_util.variation);
+        _util.GetDirectory(f_out, dir, _util.variation );
+    }
+
+    dir->cd();
+
+    htemp_e->Write("",TObject::kOverwrite);
+    htemp_cang->Write("",TObject::kOverwrite);
+    htemp_tot->Write("",TObject::kOverwrite);
+
+    f_out->Close();
+
+    f_gen->cd();
+    f_gen->Close();
+
+
+}
+// -----------------------------------------------------------------------------
+void CrossSectionHelper::CheckPi0CrossSection(){
+
+
+    TFile *f_genie = TFile::Open("../ntuples/neutrinoselection_filt_run1_overlay_newtune.root", "READ");
+    TTree *t_genie = (TTree*)f_genie->Get("nuselection/NeutrinoSelectionFilter");
+
+    TH1D *h_genie_cc = new TH1D("h_genie_cc","GENIE v3;#pi^{0} energy [GeV]; CC events", 20, 0, 0.6);
+    TH1D *h_genie_nc = new TH1D("h_genie_nc","GENIE v3;#pi^{0} energy [GeV]; NC events", 20, 0, 0.6);
+    TH1D *h_genie    = new TH1D("h_genie","GENIE v3;#pi^{0} energy [GeV]; CC + NC events", 20, 0, 0.6);
+
+    t_genie->Draw("pi0_e >> h_genie_cc", "npi0 > 0 && ccnc == 0");
+    t_genie->Draw("pi0_e >> h_genie_nc", "npi0 > 0 && ccnc == 1");
+    t_genie->Draw("pi0_e >> h_genie",    "npi0 > 0");
+
+    TFile *f_nuwro = TFile::Open("../ntuples/detvar_newtune/run1/neutrinoselection_filt_run1_overlay_nuwro.root", "READ");
+    TTree *t_nuwro = (TTree*)f_nuwro->Get("nuselection/NeutrinoSelectionFilter");
+
+    TH1D *h_nuwro_cc = new TH1D("h_nuwro_cc","NuWro;#pi^{0} energy [GeV]; CC events", 20, 0, 0.6);
+    TH1D *h_nuwro_nc = new TH1D("h_nuwro_nc","NuWro;#pi^{0} energy [GeV]; NC events", 20, 0, 0.6);
+    TH1D *h_nuwro    = new TH1D("h_nuwro","NuWro;#pi^{0} energy [GeV]; CC + NCevents", 20, 0, 0.6);
+
+    t_nuwro->Draw("pi0_e >> h_nuwro_cc", "npi0 > 0 && ccnc == 0");
+    t_nuwro->Draw("pi0_e >> h_nuwro_nc", "npi0 > 0 && ccnc == 1");
+    t_nuwro->Draw("pi0_e >> h_nuwro",    "npi0 > 0");
+
+    h_nuwro_cc->Scale(3.5165631);
+    h_nuwro_nc->Scale(3.5165631);
+    h_nuwro   ->Scale(3.5165631);
+
+    TFile *f_out = TFile::Open("files/pi0_ratios.root", "RECREATE");
+
+    h_genie_cc->SetOption("hist");
+    h_genie_nc->SetOption("hist");
+    h_genie->SetOption("hist");
+    h_genie_cc->SetLineWidth(3);
+    h_genie_nc->SetLineWidth(3);
+    h_genie->SetLineWidth(3);
+    h_genie_cc->SetLineColor(kRed+2);
+    h_genie_nc->SetLineColor(kRed+2);
+    h_genie->SetLineColor(kRed+2);
+
+    h_genie_cc->Write();
+    h_genie_nc->Write();
+    h_genie->Write();
+
+    h_genie_cc->Divide(h_nuwro_cc);
+    h_genie_nc->Divide(h_nuwro_nc);
+    h_genie->Divide(h_nuwro);
+
+    h_genie_cc->SetTitle("GENIE v3/ NuWro CC #pi^{0};#pi^{0} energy [GeV]; Ratio");
+    h_genie_nc->SetTitle("GENIE v3/ NuWro NC #pi^{0};#pi^{0} energy [GeV]; Ratio");
+    h_genie->SetTitle("GENIE v3/ NuWro CC+NC #pi^{0};#pi^{0} energy [GeV]; Ratio");
+
+    
+
+    h_nuwro_cc->Write();
+    h_nuwro_nc->Write();
+    h_nuwro->Write();
+
+    h_genie_cc->Write("h_ratio_cc");
+    h_genie_nc->Write("h_ratio_nc");
+    h_genie->Write("h_ratio");
+
+    f_out->Close();
+
+}
